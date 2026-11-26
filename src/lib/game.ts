@@ -77,6 +77,6 @@ export function verdict(diff: number | null): string {
   if (diff === 0) return 'Exakt rätt!'
   if (diff <= 2) return 'Supernära'
   if (diff <= 5) return 'Nära'
-  if (diff <= 10) return 'Sådär'
+  if (diff < 10) return 'Sådär' // 10+ år fel ger 0 p
   return 'Långt bort'
 }
