@@ -3,6 +3,9 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // VITE_* lokalt, NEXT_PUBLIC_* från Vercels Supabase-integration.
+  // Bara publika prefix – SUPABASE_SECRET_KEY når aldrig webbläsaren.
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
   plugins: [
     vue(),
     VitePWA({

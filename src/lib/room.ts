@@ -6,8 +6,10 @@ import { CLIP_SECONDS } from './audio'
 import type { Song } from './songs'
 
 // ---------- Supabase ----------
-const url = import.meta.env.VITE_SUPABASE_URL
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY
+const env = import.meta.env
+const url = env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL
+const key =
+  env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 export const supabase: SupabaseClient | null =
   url && key ? createClient(url, key, { realtime: { params: { eventsPerSecond: 10 } } }) : null
 

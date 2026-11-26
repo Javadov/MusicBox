@@ -25,7 +25,7 @@ Testa i mobilen: öppna adressen som visas under "Network" (t.ex. `http://192.16
 
 ### Installera som app
 PWA-installation kräver HTTPS. Deploya `dist/` gratis till Vercel eller Netlify
-(`npm run build`, lägg in samma två env-variabler där). Öppna sedan sidan i Safari/Chrome → "Lägg till på hemskärmen".
+(`npm run build`, lägg in samma två env-variabler där – eller koppla Vercels Supabase-integration, appen läser även dess `NEXT_PUBLIC_SUPABASE_*`-variabler). Öppna sedan sidan i Safari/Chrome → "Lägg till på hemskärmen".
 
 ## Struktur
 | Fil | Vad |
