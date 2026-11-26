@@ -54,11 +54,15 @@ export function stopClip() {
   el?.pause()
 }
 
-/** Spelar klippet i CLIP_SECONDS sekunder, med start vid `startAt` (Date.now()-tid). */
+/** iTunes-klippen är ~30 s långa, så längre speltid än så går inte. */
+export const MAX_CLIP_SECONDS = 30
+
+/** Spelar klippet i `seconds` sekunder, med start vid `startAt` (Date.now()-tid). */
 export async function playClip(
   url: string,
   startAt = Date.now(),
   onEnd?: () => void,
+  seconds = CLIP_SECONDS,
 ): Promise<boolean> {
   stopClip()
   await preload(url)
@@ -67,7 +71,7 @@ export async function playClip(
     const go = async () => {
       // Om vi är sena (t.ex. långsam laddning) hoppar vi fram så att alla hör samma ställe
       const lateSec = Math.max(0, (Date.now() - startAt) / 1000)
-      const remaining = CLIP_SECONDS - lateSec
+      const remaining = Math.min(seconds, MAX_CLIP_SECONDS) - lateSec
       if (remaining <= 0.5) {
         onEnd?.()
         return resolve(false)

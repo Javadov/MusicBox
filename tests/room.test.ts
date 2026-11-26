@@ -102,6 +102,9 @@ describe('onlinerum', () => {
   it('öppnar gissningen efter låten eller direkt beroende på inställning', () => {
     expect(guessWindow({ guessSeconds: 20 })).toEqual({ opens: 10, closes: 30 })
     expect(guessWindow({ guessSeconds: 20, guessDuring: true })).toEqual({ opens: 0, closes: 20 })
+    // längre speltid flyttar fram när gissningen öppnar i läget "efter låten"
+    expect(guessWindow({ guessSeconds: 10, clipSeconds: 30 })).toEqual({ opens: 30, closes: 40 })
+    expect(guessWindow({ guessSeconds: 30, clipSeconds: 30, guessDuring: true })).toEqual({ opens: 0, closes: 30 })
   })
 
   it('avslöjar när tiden tagit slut i läget "gissa direkt"', async () => {
@@ -140,6 +143,21 @@ describe('onlinerum', () => {
     expect(r.auto?.[host.me.id]).toBe(false)
     expect(r.guesses[sara.me.id]).toBeNull()
     expect(r.pts[sara.me.id]).toBe(0)
+    vi.useRealTimers()
+  })
+
+  it('spelar längre låt och väntar in den innan avslöjandet', async () => {
+    vi.useFakeTimers()
+    const host = useRoom('4444', 'Värd', true)
+    host.connect(); await tick(1)
+    host.hostSettings(10, true, 10, false, 30); await tick(1) // 30 s låt, sedan 10 s att gissa
+    host.hostStart(); await tick(1)
+    expect(host.state.value?.clipSeconds).toBe(30)
+    host.guess(1999) // alla har gissat – men låten ska få spela klart
+    await tick(3000 + 25000)
+    expect(host.state.value?.phase).toBe('listen')
+    await tick(6000)
+    expect(host.state.value?.phase).toBe('reveal')
     vi.useRealTimers()
   })
 })

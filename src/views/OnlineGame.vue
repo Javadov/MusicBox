@@ -5,7 +5,7 @@ import YearSlider from '../components/YearSlider.vue'
 import Standings from '../components/Standings.vue'
 import { CLIP_SECONDS, playClip, stopClip, unlockAudio } from '../lib/audio'
 import { verdict, yearDiff } from '../lib/game'
-import { CODE_LENGTH, guessWindow, makeCode, useRoom } from '../lib/room'
+import { CODE_LENGTH, clipLength, guessWindow, makeCode, useRoom } from '../lib/room'
 import { useNow } from '../lib/useNow'
 
 const props = defineProps<{ mode: 'host' | 'join' }>()
@@ -27,6 +27,21 @@ const count = ref(10)
 const audioAll = ref(true)
 const guessSeconds = ref(20)
 const guessDuring = ref(false)
+const clipSeconds = ref(CLIP_SECONDS)
+
+// I läget "direkt" måste gissningstiden räcka hela låten – justera det andra valet automatiskt
+function setClip(n: number) {
+  clipSeconds.value = n
+  if (guessDuring.value && guessSeconds.value < n) guessSeconds.value = n
+}
+function setGuess(n: number) {
+  guessSeconds.value = n
+  if (guessDuring.value && clipSeconds.value > n) clipSeconds.value = n
+}
+function setDuring(d: boolean) {
+  guessDuring.value = d
+  if (d && guessSeconds.value < clipSeconds.value) guessSeconds.value = clipSeconds.value
+}
 /** Lås-knappen är inaktiv tills spelaren själv har rört årshjulet den här omgången */
 const touched = ref(false)
 
@@ -58,8 +73,8 @@ async function startAudio() {
   const s = r.state.value!
   if (!s.clipUrl) return
   blocked.value = false
-  const ok = await playClip(s.clipUrl, r.startAt.value)
-  if (!ok && Date.now() - r.startAt.value < CLIP_SECONDS * 1000 - 500) blocked.value = true
+  const ok = await playClip(s.clipUrl, r.startAt.value, undefined, clipLength(s))
+  if (!ok && Date.now() - r.startAt.value < clipLength(s) * 1000 - 500) blocked.value = true
 }
 
 // Skicka året på hjulet löpande, så det räknas om man glömmer trycka Klar!
@@ -68,8 +83,8 @@ watch([year, touched], ([y, t]) => {
 })
 
 const pushSettings = () =>
-  room.value?.hostSettings(count.value, audioAll.value, guessSeconds.value, guessDuring.value)
-watch([count, audioAll, guessSeconds, guessDuring], pushSettings)
+  room.value?.hostSettings(count.value, audioAll.value, guessSeconds.value, guessDuring.value, clipSeconds.value)
+watch([count, audioAll, guessSeconds, guessDuring, clipSeconds], pushSettings)
 watch(
   () => room.value?.connected.value,
   (c) => c && isHost && pushSettings(),
@@ -80,7 +95,9 @@ const me = computed(() => room.value?.me)
 const inGame = computed(() => !!s.value?.players.some((p) => p.id === me.value?.id))
 const elapsed = computed(() => (room.value ? now.value - room.value.startAt.value : 0))
 const countdown = computed(() => Math.ceil(-elapsed.value / 1000))
-const progress = computed(() => Math.min(1, Math.max(0, elapsed.value / (CLIP_SECONDS * 1000))))
+const progress = computed(() =>
+  s.value ? Math.min(1, Math.max(0, elapsed.value / (clipLength(s.value) * 1000))) : 0,
+)
 const win = computed(() => (s.value ? guessWindow(s.value) : { opens: 0, closes: 0 }))
 const guessOpen = computed(() => elapsed.value >= win.value.opens * 1000)
 const guessLeft = computed(() => Math.max(0, Math.ceil(win.value.closes - elapsed.value / 1000)))
@@ -177,19 +194,23 @@ onBeforeUnmount(() => {
             <button class="chip" :class="{ on: audioAll }" @click="audioAll = true">Alla mobiler</button>
             <button class="chip" :class="{ on: !audioAll }" @click="audioAll = false">Bara min (högtalare)</button>
           </div>
+          <h3>Låtens speltid</h3>
+          <div class="row">
+            <button v-for="n in [10, 20, 30]" :key="n" class="chip" :class="{ on: clipSeconds === n }" @click="setClip(n)">{{ n }} s</button>
+          </div>
           <h3>När gissar man?</h3>
           <div class="row">
-            <button class="chip" :class="{ on: !guessDuring }" @click="guessDuring = false">Efter låten</button>
-            <button class="chip" :class="{ on: guessDuring }" @click="guessDuring = true">Direkt när den börjar</button>
+            <button class="chip" :class="{ on: !guessDuring }" @click="setDuring(false)">Efter låten</button>
+            <button class="chip" :class="{ on: guessDuring }" @click="setDuring(true)">Direkt när den börjar</button>
           </div>
           <p class="muted small">
             {{ guessDuring
-              ? 'Man kan gissa så fort låten startar. Tiden och snabbhetsbonusen räknas från låtstart.'
+              ? 'Man kan gissa så fort låten startar. Tiden och snabbhetsbonusen räknas från låtstart, och gissningstiden räcker alltid hela låten.'
               : 'Man lyssnar klart först. Tiden och snabbhetsbonusen räknas från att låten är slut.' }}
           </p>
           <h3>{{ guessDuring ? 'Tid att gissa från låtstart' : 'Tid att gissa efter låten' }}</h3>
           <div class="row">
-            <button v-for="n in [10, 20, 30]" :key="n" class="chip" :class="{ on: guessSeconds === n }" @click="guessSeconds = n">{{ n }} s</button>
+            <button v-for="n in [10, 20, 30]" :key="n" class="chip" :class="{ on: guessSeconds === n }" @click="setGuess(n)">{{ n }} s</button>
           </div>
         </section>
         <button id="start-online" class="btn" :disabled="room.present.value.length < 1" @click="room.hostStart()">Starta spelet</button>

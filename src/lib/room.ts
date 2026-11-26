@@ -28,6 +28,8 @@ export interface RoomState {
   guessSeconds: number
   /** true = gissa medan låten spelar (tiden räknas från låtstart), false = gissa efter låten */
   guessDuring?: boolean
+  /** hur länge låten spelar, i sekunder (10/20/30) */
+  clipSeconds?: number
   /** ms tills klippet startar, räknat från när meddelandet skickades */
   startIn?: number
   clipUrl?: string
@@ -54,9 +56,12 @@ export const makeCode = () =>
 const uid = () => Math.random().toString(36).slice(2, 10)
 const START_DELAY = 3000
 
+/** Låtens speltid i sekunder (äldre rum utan inställningen spelar 10 s). */
+export const clipLength = (s: { clipSeconds?: number }) => s.clipSeconds ?? CLIP_SECONDS
+
 /** När gissningen öppnar och stänger, i sekunder från att klippet startar. */
-export function guessWindow(s: { guessSeconds: number; guessDuring?: boolean }) {
-  const opens = s.guessDuring ? 0 : CLIP_SECONDS
+export function guessWindow(s: { guessSeconds: number; guessDuring?: boolean; clipSeconds?: number }) {
+  const opens = s.guessDuring ? 0 : clipLength(s)
   return { opens, closes: opens + s.guessSeconds }
 }
 
@@ -227,6 +232,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
         audioAll: true,
         guessSeconds: 20,
         guessDuring: false,
+        clipSeconds: CLIP_SECONDS,
         totals: {},
         players: [],
       }
@@ -239,9 +245,15 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     send({ ...s, players: present.value.map(({ id, name }) => ({ id, name })) })
   }
 
-  function hostSettings(total: number, audioAll: boolean, guessSeconds: number, guessDuring = false) {
+  function hostSettings(
+    total: number,
+    audioAll: boolean,
+    guessSeconds: number,
+    guessDuring = false,
+    clipSeconds = CLIP_SECONDS,
+  ) {
     const s = base()
-    send({ ...s, total, audioAll, guessSeconds, guessDuring })
+    send({ ...s, total, audioAll, guessSeconds, guessDuring, clipSeconds })
   }
 
   function hostStart() {
@@ -297,7 +309,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     if (allIn) {
       clearTimeout(revealTimer)
       // vänta tills klippet spelat klart innan vi avslöjar
-      const wait = Math.max(0, hostStartAt + CLIP_SECONDS * 1000 - Date.now())
+      const wait = Math.max(0, hostStartAt + clipLength(s) * 1000 - Date.now())
       revealTimer = setTimeout(hostReveal, wait)
     }
   }
