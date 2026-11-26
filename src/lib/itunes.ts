@@ -74,16 +74,35 @@ export function pickBest(song: Song, results: ItunesResult[]): ItunesResult | un
   )
 }
 
+type SearchResponse = { results: ItunesResult[] }
+
+/**
+ * Sök via vår egen /api/itunes (Vercel-funktion, eller Vite-proxy lokalt).
+ * Faller tillbaka på JSONP direkt mot iTunes om /api saknas – fungerar på dator men inte på iPhone.
+ */
+async function search(term: string, country: string): Promise<SearchResponse> {
+  try {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 8000)
+    const res = await fetch(`/api/itunes?term=${encodeURIComponent(term)}&country=${country}`, { signal: ctrl.signal })
+    clearTimeout(t)
+    if (res.ok && res.headers.get('content-type')?.includes('json')) return await res.json()
+  } catch {
+    /* prova JSONP */
+  }
+  return jsonp<SearchResponse>(
+    `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=song&limit=15&country=${country}`,
+  )
+}
+
 export async function findClip(song: Song): Promise<Clip | null> {
   const key = `${song.a}|${song.t}`
   if (cache.has(key)) return cache.get(key)!
-  const term = encodeURIComponent(`${song.a} ${song.t}`)
+  const term = `${song.a} ${song.t}`
   let clip: Clip | null = null
   for (const country of ['SE', 'US']) {
     try {
-      const data = await jsonp<{ results: ItunesResult[] }>(
-        `https://itunes.apple.com/search?term=${term}&media=music&entity=song&limit=15&country=${country}`,
-      )
+      const data = await search(term, country)
       const best = pickBest(song, data.results ?? [])
       if (best?.previewUrl) {
         clip = {

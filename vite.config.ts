@@ -6,6 +6,18 @@ export default defineConfig({
   // VITE_* lokalt, NEXT_PUBLIC_* från Vercels Supabase-integration.
   // Bara publika prefix – SUPABASE_SECRET_KEY når aldrig webbläsaren.
   envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
+  server: {
+    // Lokalt: samma /api/itunes som Vercel-funktionen (api/itunes.js) ger i produktion.
+    // Egen user-agent – annars skickar iTunes iPhone-anrop vidare till musics://
+    proxy: {
+      '/api/itunes': {
+        target: 'https://itunes.apple.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/itunes/, '/search') + '&media=music&entity=song&limit=15',
+        headers: { 'user-agent': 'MusicBox/1.0' },
+      },
+    },
+  },
   plugins: [
     vue(),
     VitePWA({
