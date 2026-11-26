@@ -6,7 +6,8 @@ import Standings from '../components/Standings.vue'
 import { CLIP_SECONDS, playClip, stopClip, unlockAudio } from '../lib/audio'
 import { drawSongs, points, verdict, yearDiff } from '../lib/game'
 import { correctedYear, findClip, type Clip } from '../lib/itunes'
-import { DEFAULT_LIST, LISTS, getList, loadSongs, type ListId, type Song } from '../lib/songs'
+import ListSelect from '../components/ListSelect.vue'
+import { DEFAULT_LIST, getList, loadSongs, type ListId, type Song } from '../lib/songs'
 import { useNow } from '../lib/useNow'
 
 defineEmits<{ exit: [] }>()
@@ -141,9 +142,7 @@ onBeforeUnmount(stopClip)
     </section>
     <section class="card stack">
       <h3>Låtlista</h3>
-      <div class="row wrap">
-        <button v-for="l in LISTS" :key="l.id" class="chip" :class="{ on: list === l.id }" @click="list = l.id">{{ l.flag }} {{ l.label }}</button>
-      </div>
+      <ListSelect v-model="list" />
       <div class="row"><h3 class="grow">Antal låtar</h3><span class="big">{{ count }}</span></div>
       <input id="count" v-model.number="count" type="range" min="10" max="100" step="5" class="plain" aria-label="Antal låtar" />
       <div class="row">

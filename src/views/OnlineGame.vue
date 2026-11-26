@@ -6,7 +6,8 @@ import Standings from '../components/Standings.vue'
 import { CLIP_SECONDS, playClip, stopClip, unlockAudio } from '../lib/audio'
 import { verdict, yearDiff } from '../lib/game'
 import { CODE_LENGTH, clipLength, guessWindow, makeCode, useRoom } from '../lib/room'
-import { DEFAULT_LIST, LISTS, getList, type ListId } from '../lib/songs'
+import ListSelect from '../components/ListSelect.vue'
+import { DEFAULT_LIST, getList, type ListId } from '../lib/songs'
 import { useNow } from '../lib/useNow'
 
 const props = defineProps<{ mode: 'host' | 'join' }>()
@@ -198,9 +199,7 @@ onBeforeUnmount(() => {
       <template v-if="isHost">
         <section class="card stack">
           <h3>Låtlista</h3>
-          <div class="row wrap">
-            <button v-for="l in LISTS" :key="l.id" class="chip" :class="{ on: list === l.id }" @click="list = l.id">{{ l.flag }} {{ l.label }}</button>
-          </div>
+          <ListSelect v-model="list" />
           <div class="row"><h3 class="grow">Antal låtar</h3><span class="big">{{ count }}</span></div>
           <input id="count" v-model.number="count" type="range" min="10" max="100" step="5" class="plain" aria-label="Antal låtar" />
           <h3>Ljud</h3>
