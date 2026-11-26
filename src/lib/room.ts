@@ -26,6 +26,8 @@ export interface RoomState {
   roundId: string
   audioAll: boolean
   guessSeconds: number
+  /** true = gissa medan låten spelar (tiden räknas från låtstart), false = gissa efter låten */
+  guessDuring?: boolean
   /** ms tills klippet startar, räknat från när meddelandet skickades */
   startIn?: number
   clipUrl?: string
@@ -49,6 +51,12 @@ export const makeCode = () =>
   Array.from({ length: CODE_LENGTH }, () => Math.floor(Math.random() * 10)).join('')
 const uid = () => Math.random().toString(36).slice(2, 10)
 const START_DELAY = 3000
+
+/** När gissningen öppnar och stänger, i sekunder från att klippet startar. */
+export function guessWindow(s: { guessSeconds: number; guessDuring?: boolean }) {
+  const opens = s.guessDuring ? 0 : CLIP_SECONDS
+  return { opens, closes: opens + s.guessSeconds }
+}
 
 export function useRoom(code: string, name: string, isHost: boolean) {
   const me: Player = { id: uid(), name }
@@ -194,6 +202,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
         roundId: '',
         audioAll: true,
         guessSeconds: 20,
+        guessDuring: false,
         totals: {},
         players: [],
       }
@@ -206,9 +215,9 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     send({ ...s, players: present.value.map(({ id, name }) => ({ id, name })) })
   }
 
-  function hostSettings(total: number, audioAll: boolean, guessSeconds: number) {
+  function hostSettings(total: number, audioAll: boolean, guessSeconds: number, guessDuring = false) {
     const s = base()
-    send({ ...s, total, audioAll, guessSeconds })
+    send({ ...s, total, audioAll, guessSeconds, guessDuring })
   }
 
   function hostStart() {
@@ -250,14 +259,15 @@ export function useRoom(code: string, name: string, isHost: boolean) {
       reveal: undefined,
     }
     send(ns)
-    revealTimer = setTimeout(hostReveal, START_DELAY + (CLIP_SECONDS + ns.guessSeconds) * 1000)
+    revealTimer = setTimeout(hostReveal, START_DELAY + guessWindow(ns).closes * 1000)
   }
 
   function hostGuess(id: string, roundId: string, year: number) {
     const s = state.value
     if (!s || s.phase !== 'listen' || s.roundId !== roundId || id in guesses) return
     guesses[id] = year
-    guessTimes[id] = Math.max(0, Date.now() - hostStartAt)
+    // tid räknas från att gissningen öppnade (låtstart eller låtslut beroende på inställning)
+    guessTimes[id] = Math.max(0, Date.now() - hostStartAt - guessWindow(s).opens * 1000)
     const allIn = s.players.every((p) => p.id in guesses)
     if (allIn) {
       clearTimeout(revealTimer)
@@ -274,7 +284,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     const pts: Record<string, number> = {}
     const bonus: Record<string, number> = {}
     const totals = { ...s.totals }
-    const windowMs = (CLIP_SECONDS + s.guessSeconds) * 1000
+    const windowMs = s.guessSeconds * 1000
     for (const p of s.players) {
       g[p.id] = guesses[p.id] ?? null
       const speed = p.id in guessTimes ? speedFactor(guessTimes[p.id], windowMs) : null

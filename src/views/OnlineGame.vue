@@ -5,7 +5,7 @@ import YearSlider from '../components/YearSlider.vue'
 import Standings from '../components/Standings.vue'
 import { CLIP_SECONDS, playClip, stopClip, unlockAudio } from '../lib/audio'
 import { verdict, yearDiff } from '../lib/game'
-import { CODE_LENGTH, makeCode, useRoom } from '../lib/room'
+import { CODE_LENGTH, guessWindow, makeCode, useRoom } from '../lib/room'
 import { useNow } from '../lib/useNow'
 
 const props = defineProps<{ mode: 'host' | 'join' }>()
@@ -26,6 +26,9 @@ const now = useNow()
 const count = ref(10)
 const audioAll = ref(true)
 const guessSeconds = ref(20)
+const guessDuring = ref(false)
+/** Lås-knappen är inaktiv tills spelaren själv har rört årshjulet den här omgången */
+const touched = ref(false)
 
 async function enter() {
   if (!name.value.trim() || !codeOk.value) return
@@ -44,6 +47,7 @@ function onState() {
   if (s.phase === 'listen' && s.roundId !== lastRound) {
     lastRound = s.roundId
     year.value = 1992
+    touched.value = false
     if (s.audioAll || isHost) startAudio()
   }
   if (s.phase !== 'listen') stopClip()
@@ -58,10 +62,12 @@ async function startAudio() {
   if (!ok && Date.now() - r.startAt.value < CLIP_SECONDS * 1000 - 500) blocked.value = true
 }
 
-watch([count, audioAll, guessSeconds], () => room.value?.hostSettings(count.value, audioAll.value, guessSeconds.value))
+const pushSettings = () =>
+  room.value?.hostSettings(count.value, audioAll.value, guessSeconds.value, guessDuring.value)
+watch([count, audioAll, guessSeconds, guessDuring], pushSettings)
 watch(
   () => room.value?.connected.value,
-  (c) => c && isHost && room.value?.hostSettings(count.value, audioAll.value, guessSeconds.value),
+  (c) => c && isHost && pushSettings(),
 )
 
 const s = computed(() => room.value?.state.value ?? null)
@@ -70,8 +76,12 @@ const inGame = computed(() => !!s.value?.players.some((p) => p.id === me.value?.
 const elapsed = computed(() => (room.value ? now.value - room.value.startAt.value : 0))
 const countdown = computed(() => Math.ceil(-elapsed.value / 1000))
 const progress = computed(() => Math.min(1, Math.max(0, elapsed.value / (CLIP_SECONDS * 1000))))
-const guessLeft = computed(() =>
-  s.value ? Math.max(0, Math.ceil(CLIP_SECONDS + s.value.guessSeconds - elapsed.value / 1000)) : 0,
+const win = computed(() => (s.value ? guessWindow(s.value) : { opens: 0, closes: 0 }))
+const guessOpen = computed(() => elapsed.value >= win.value.opens * 1000)
+const guessLeft = computed(() => Math.max(0, Math.ceil(win.value.closes - elapsed.value / 1000)))
+const canLock = computed(() => touched.value && guessOpen.value && guessLeft.value > 0)
+const lockLabel = computed(() =>
+  !guessOpen.value ? (s.value?.guessDuring ? 'Vänta på låten…' : 'Gissa när låten är slut') : !touched.value ? 'Dra för att välja år' : `Lås ${year.value}`,
 )
 const locked = computed(() => room.value?.myGuess.value?.roundId === s.value?.roundId)
 const hearsAudio = computed(() => !!s.value && (s.value.audioAll || isHost))
@@ -87,6 +97,7 @@ const revealRows = computed(() => {
 })
 
 function lock() {
+  if (!canLock.value) return
   room.value?.guess(year.value)
 }
 function copyCode() {
@@ -158,7 +169,17 @@ onBeforeUnmount(() => {
             <button class="chip" :class="{ on: audioAll }" @click="audioAll = true">Alla mobiler</button>
             <button class="chip" :class="{ on: !audioAll }" @click="audioAll = false">Bara min (högtalare)</button>
           </div>
-          <h3>Tid att gissa efter låten</h3>
+          <h3>När gissar man?</h3>
+          <div class="row">
+            <button class="chip" :class="{ on: !guessDuring }" @click="guessDuring = false">Efter låten</button>
+            <button class="chip" :class="{ on: guessDuring }" @click="guessDuring = true">Direkt när den börjar</button>
+          </div>
+          <p class="muted small">
+            {{ guessDuring
+              ? 'Man kan gissa så fort låten startar. Tiden och snabbhetsbonusen räknas från låtstart.'
+              : 'Man lyssnar klart först. Tiden och snabbhetsbonusen räknas från att låten är slut.' }}
+          </p>
+          <h3>{{ guessDuring ? 'Tid att gissa från låtstart' : 'Tid att gissa efter låten' }}</h3>
           <div class="row">
             <button v-for="n in [10, 20, 30]" :key="n" class="chip" :class="{ on: guessSeconds === n }" @click="guessSeconds = n">{{ n }} s</button>
           </div>
@@ -184,12 +205,14 @@ onBeforeUnmount(() => {
       <div class="center">
         <button v-if="blocked" class="btn pink" @click="startAudio">Tryck för att spela</button>
         <p v-else-if="countdown > 0" class="muted">Låten startar om {{ countdown }}…</p>
-        <p v-else-if="progress < 1" class="muted">{{ hearsAudio ? 'Lyssna!' : 'Lyssna på högtalaren!' }}</p>
-        <p v-else class="muted">{{ guessLeft }} s kvar att gissa</p>
+        <p v-else-if="guessOpen" class="muted">
+          {{ progress < 1 ? (hearsAudio ? 'Lyssna och gissa!' : 'Lyssna på högtalaren och gissa!') + ' ' : '' }}{{ guessLeft }} s kvar att gissa
+        </p>
+        <p v-else class="muted">{{ hearsAudio ? 'Lyssna!' : 'Lyssna på högtalaren!' }}</p>
       </div>
       <section v-if="inGame && !locked" class="card stack">
-        <YearSlider v-model="year" />
-        <button id="lock" class="btn" @click="lock">Lås {{ year }}</button>
+        <YearSlider v-model="year" @interact="touched = true" />
+        <button id="lock" class="btn" :disabled="!canLock" @click="lock">{{ lockLabel }}</button>
       </section>
       <section v-else-if="inGame" class="card center stack">
         <p>Du gissade <strong>{{ room.myGuess.value?.year }}</strong></p>

@@ -28,10 +28,11 @@ vi.mock('../src/lib/itunes', () => ({ findClip: async () => ({ previewUrl: 'http
 
 let useRoom: typeof import('../src/lib/room').useRoom
 let makeCode: typeof import('../src/lib/room').makeCode
+let guessWindow: typeof import('../src/lib/room').guessWindow
 beforeAll(async () => {
   vi.stubEnv('VITE_SUPABASE_URL', 'https://fake.supabase.co')
   vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'fake')
-  ;({ useRoom, makeCode } = await import('../src/lib/room'))
+  ;({ useRoom, makeCode, guessWindow } = await import('../src/lib/room'))
 })
 const tick = (ms = 0) => vi.advanceTimersByTimeAsync(ms)
 
@@ -95,6 +96,25 @@ describe('onlinerum', () => {
     expect(guest.state.value?.total).toBe(20)
     await tick(6000)
     expect(guest.error.value).toBe('')
+    vi.useRealTimers()
+  })
+
+  it('öppnar gissningen efter låten eller direkt beroende på inställning', () => {
+    expect(guessWindow({ guessSeconds: 20 })).toEqual({ opens: 10, closes: 30 })
+    expect(guessWindow({ guessSeconds: 20, guessDuring: true })).toEqual({ opens: 0, closes: 20 })
+  })
+
+  it('avslöjar när tiden tagit slut i läget "gissa direkt"', async () => {
+    vi.useFakeTimers()
+    const host = useRoom('7777', 'Värd', true)
+    host.connect(); await tick(1)
+    host.hostSettings(10, true, 10, true); await tick(1)
+    host.hostStart(); await tick(1)
+    expect(host.state.value?.guessDuring).toBe(true)
+    await tick(3000 + 9000)
+    expect(host.state.value?.phase).toBe('listen')
+    await tick(1500) // 3 s nedräkning + 10 s
+    expect(host.state.value?.phase).toBe('reveal')
     vi.useRealTimers()
   })
 })

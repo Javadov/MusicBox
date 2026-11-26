@@ -1,16 +1,86 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { MIN_YEAR, MAX_YEAR } from '../lib/songs'
 
 const model = defineModel<number>({ required: true })
-defineProps<{ disabled?: boolean }>()
-const decades = computed(() => {
-  const out: number[] = []
-  for (let y = Math.ceil(MIN_YEAR / 10) * 10; y <= MAX_YEAR; y += 10) out.push(y)
-  return out
+const props = defineProps<{ disabled?: boolean }>()
+/** Skickas när spelaren själv rör hjulet eller −/+ (inte när värdet ändras från koden). */
+const emit = defineEmits<{ interact: [] }>()
+
+/** px per år på hjulet */
+const STEP = 14
+const years = Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i)
+const wheel = ref<HTMLElement | null>(null)
+/** hjulets position i år (flyttal) – styr streckens storlek medan man drar */
+const pos = ref(model.value - MIN_YEAR)
+
+const clamp = (y: number) => Math.min(MAX_YEAR, Math.max(MIN_YEAR, y))
+
+function interact() {
+  if (!props.disabled) emit('interact')
+}
+
+function step(d: number) {
+  interact()
+  model.value = clamp(model.value + d)
+}
+
+let raf = 0
+function onScroll() {
+  cancelAnimationFrame(raf)
+  raf = requestAnimationFrame(() => {
+    const el = wheel.value
+    if (!el) return
+    pos.value = el.scrollLeft / STEP
+    const y = clamp(MIN_YEAR + Math.round(pos.value))
+    if (y !== model.value) {
+      model.value = y
+      if (userScrolling) navigator.vibrate?.(4) // liten "klick"-känsla på Android
+    }
+  })
+}
+
+// Skilj på spelarens scroll och vår egen scrollTo
+let userScrolling = false
+function startUser() {
+  userScrolling = true
+  interact()
+}
+function endUser() {
+  userScrolling = false
+}
+
+function scrollToYear(y: number, smooth: boolean) {
+  const el = wheel.value
+  if (!el) return
+  el.scrollTo({ left: (y - MIN_YEAR) * STEP, behavior: smooth ? 'smooth' : 'auto' })
+}
+
+watch(model, (y) => {
+  if (MIN_YEAR + Math.round(pos.value) !== y) scrollToYear(y, Math.abs(MIN_YEAR + pos.value - y) <= 5)
 })
-const pct = computed(() => ((model.value - MIN_YEAR) / (MAX_YEAR - MIN_YEAR)) * 100)
-const step = (d: number) => (model.value = Math.min(MAX_YEAR, Math.max(MIN_YEAR, model.value + d)))
+
+onMounted(async () => {
+  await nextTick()
+  scrollToYear(model.value, false)
+  pos.value = model.value - MIN_YEAR
+})
+
+function onKey(e: KeyboardEvent) {
+  const d = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -10, PageUp: 10 }[e.key]
+  if (d) {
+    e.preventDefault()
+    step(d)
+  }
+}
+
+function tickStyle(i: number) {
+  const d = Math.abs(i - pos.value)
+  const grow = Math.max(0, 1 - d / 2.5) // 1 i mitten, 0 en bit bort
+  return { height: `${(years[i] % 10 === 0 ? 30 : 22) + grow * 26}px` }
+}
+
+const centerYear = computed(() => MIN_YEAR + Math.round(pos.value))
 </script>
 
 <template>
@@ -20,21 +90,46 @@ const step = (d: number) => (model.value = Math.min(MAX_YEAR, Math.max(MIN_YEAR,
       <output class="big-year" aria-live="polite">{{ model }}</output>
       <button class="nudge" :disabled="disabled" aria-label="Ett år senare" @click="step(1)">+</button>
     </div>
-    <input
-      id="year-range" v-model.number="model" type="range" :min="MIN_YEAR" :max="MAX_YEAR" step="1"
-      :disabled="disabled" :style="{ '--p': pct + '%' }" aria-label="Välj år"
-    />
-    <div class="ticks">
-      <span v-for="d in decades" :key="d" :style="{ left: ((d - MIN_YEAR) / (MAX_YEAR - MIN_YEAR)) * 100 + '%' }">
-        {{ String(d).slice(2) }}
-      </span>
+
+    <div class="wheel-wrap">
+      <div
+        id="year-wheel"
+        ref="wheel"
+        class="wheel"
+        role="slider"
+        tabindex="0"
+        aria-label="Välj år"
+        :aria-valuemin="MIN_YEAR"
+        :aria-valuemax="MAX_YEAR"
+        :aria-valuenow="model"
+        @scroll.passive="onScroll"
+        @touchstart.passive="startUser"
+        @touchend.passive="endUser"
+        @pointerdown="startUser"
+        @pointerup="endUser"
+        @wheel.passive="startUser"
+        @keydown="onKey"
+      >
+        <div class="track" :style="{ '--step': STEP + 'px' }">
+          <span
+            v-for="(y, i) in years"
+            :key="y"
+            class="tick"
+            :class="{ past: y <= centerYear, decade: y % 10 === 0, center: y === centerYear }"
+          >
+            <i :style="tickStyle(i)" />
+            <small v-if="y % 10 === 0">{{ String(y).slice(2) }}</small>
+          </span>
+        </div>
+      </div>
+      <div class="pointer" aria-hidden="true" />
     </div>
   </div>
 </template>
 
 <style scoped>
-.ys { display: flex; flex-direction: column; gap: 10px; }
-.ys.disabled { opacity: .55; }
+.ys { display: flex; flex-direction: column; gap: 6px; }
+.ys.disabled { opacity: .55; pointer-events: none; }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; container-type: inline-size; }
 /* Årtalet ska alltid rymmas mellan knapparna: skala efter radens bredd (4 siffror ≈ 3,3 em i Unbounded + luft) */
 .top .big-year {
@@ -47,22 +142,38 @@ const step = (d: number) => (model.value = Math.min(MAX_YEAR, Math.max(MIN_YEAR,
   background: var(--bg2); color: var(--ink); font: 800 28px/1 Manrope; cursor: pointer;
 }
 .nudge:active { background: var(--card); }
-input[type=range] {
-  -webkit-appearance: none; appearance: none; width: 100%; height: 44px; background: transparent; margin: 0;
+
+.wheel-wrap { position: relative; margin: 0 -8px 12px; }
+.wheel {
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  scroll-snap-type: x mandatory; overscroll-behavior-x: contain; touch-action: pan-x;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+  outline: none; cursor: grab;
 }
-input[type=range]::-webkit-slider-runnable-track {
-  height: 14px; border-radius: 999px;
-  background: linear-gradient(90deg, var(--gold) var(--p), rgba(255,255,255,.14) var(--p));
+.wheel::-webkit-scrollbar { display: none; }
+.wheel:focus-visible { box-shadow: inset 0 0 0 2px var(--gold); border-radius: 12px; }
+/* Padding så att första och sista året kan hamna i mitten */
+.track { display: flex; width: max-content; padding: 0 calc(50% - var(--step) / 2); }
+.wheel .track { padding: 0 calc((100cqw - var(--step)) / 2); }
+.wheel { container-type: inline-size; }
+.tick {
+  flex: none; width: var(--step); height: 86px; scroll-snap-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  position: relative;
 }
-input[type=range]::-moz-range-track { height: 14px; border-radius: 999px; background: rgba(255,255,255,.14); }
-input[type=range]::-moz-range-progress { height: 14px; border-radius: 999px; background: var(--gold); }
-input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 40px; height: 40px; margin-top: -13px; border-radius: 50%;
-  background: #fff; border: 6px solid var(--pink); box-shadow: 0 4px 12px rgba(0,0,0,.4);
+.tick i {
+  display: block; width: 4px; border-radius: 4px; background: rgba(255, 210, 63, .28);
+  transition: height .08s linear, background-color .12s;
 }
-input[type=range]::-moz-range-thumb {
-  width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 6px solid var(--pink);
+.tick.past i { background: var(--gold); }
+.tick.center i { width: 6px; box-shadow: 0 0 12px rgba(255, 210, 63, .6); }
+.tick small {
+  position: absolute; bottom: 0; font-size: 11px; color: var(--muted); letter-spacing: .02em;
 }
-.ticks { position: relative; height: 18px; margin: -6px 20px 0; font-size: 13px; color: var(--muted); }
-.ticks span { position: absolute; transform: translateX(-50%); }
+.pointer {
+  position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%);
+  width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent;
+  border-bottom: 11px solid var(--gold); filter: drop-shadow(0 2px 4px rgba(0,0,0,.4));
+}
 </style>

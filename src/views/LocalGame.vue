@@ -21,6 +21,8 @@ const totals = ref<Record<string, number>>({})
 const guesses = ref<Record<string, number>>({})
 const turn = ref(0)
 const year = ref(MID)
+/** Lås-knappen är inaktiv tills spelaren själv har rört årshjulet */
+const touched = ref(false)
 const blocked = ref(false)
 const error = ref('')
 const now = useNow()
@@ -75,6 +77,7 @@ async function next() {
   guesses.value = {}
   turn.value = 0
   year.value = MID
+  touched.value = false
   round.value++
   phase.value = 'play'
   play()
@@ -89,10 +92,11 @@ async function play() {
 }
 
 function lock() {
-  if (!guesser.value) return
+  if (!guesser.value || !touched.value) return
   guesses.value[guesser.value.id] = year.value
   turn.value++
   year.value = MID
+  touched.value = false
 }
 
 function reveal() {
@@ -154,8 +158,8 @@ onBeforeUnmount(stopClip)
     </div>
     <section v-if="!allGuessed" class="card stack">
       <p class="center"><strong>{{ guesser!.name }}</strong> <span class="muted">gissar</span></p>
-      <YearSlider v-model="year" />
-      <button id="lock" class="btn" @click="lock">Lås {{ year }}</button>
+      <YearSlider :key="guesser!.id" v-model="year" @interact="touched = true" />
+      <button id="lock" class="btn" :disabled="!touched" @click="lock">{{ touched ? `Lås ${year}` : 'Dra för att välja år' }}</button>
     </section>
     <section v-else class="card stack center">
       <p>Alla har gissat.</p>
