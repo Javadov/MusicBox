@@ -159,7 +159,7 @@ onBeforeUnmount(stopClip)
     <section v-if="!allGuessed" class="card stack">
       <p class="center"><strong>{{ guesser!.name }}</strong> <span class="muted">gissar</span></p>
       <YearSlider :key="guesser!.id" v-model="year" @interact="touched = true" />
-      <button id="lock" class="btn" :disabled="!touched" @click="lock">{{ touched ? `Lås ${year}` : 'Dra för att välja år' }}</button>
+      <button id="lock" class="btn" :disabled="!touched" @click="lock">{{ touched ? 'Klar!' : 'Dra för att välja år' }}</button>
     </section>
     <section v-else class="card stack center">
       <p>Alla har gissat.</p>

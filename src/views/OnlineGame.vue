@@ -81,7 +81,7 @@ const guessOpen = computed(() => elapsed.value >= win.value.opens * 1000)
 const guessLeft = computed(() => Math.max(0, Math.ceil(win.value.closes - elapsed.value / 1000)))
 const canLock = computed(() => touched.value && guessOpen.value && guessLeft.value > 0)
 const lockLabel = computed(() =>
-  !guessOpen.value ? (s.value?.guessDuring ? 'Vänta på låten…' : 'Gissa när låten är slut') : !touched.value ? 'Dra för att välja år' : `Lås ${year.value}`,
+  !guessOpen.value ? (s.value?.guessDuring ? 'Vänta på låten…' : 'Gissa när låten är slut') : !touched.value ? 'Dra för att välja år' : 'Klar!',
 )
 const locked = computed(() => room.value?.myGuess.value?.roundId === s.value?.roundId)
 const hearsAudio = computed(() => !!s.value && (s.value.audioAll || isHost))

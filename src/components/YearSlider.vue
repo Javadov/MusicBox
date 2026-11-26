@@ -4,7 +4,7 @@ import { MIN_YEAR, MAX_YEAR } from '../lib/songs'
 
 const model = defineModel<number>({ required: true })
 const props = defineProps<{ disabled?: boolean }>()
-/** Skickas när spelaren själv rör hjulet eller −/+ (inte när värdet ändras från koden). */
+/** Skickas när spelaren själv rör hjulet (inte när värdet ändras från koden). */
 const emit = defineEmits<{ interact: [] }>()
 
 /** px per år på hjulet */
@@ -146,9 +146,7 @@ const centerYear = computed(() => MIN_YEAR + Math.round(pos.value))
 <template>
   <div class="ys" :class="{ disabled }">
     <div class="top">
-      <button class="nudge" :disabled="disabled" aria-label="Ett år tidigare" @click="step(-1)">−</button>
       <output class="big-year" aria-live="polite">{{ model }}</output>
-      <button class="nudge" :disabled="disabled" aria-label="Ett år senare" @click="step(1)">+</button>
     </div>
 
     <div class="wheel-wrap">
@@ -194,17 +192,12 @@ const centerYear = computed(() => MIN_YEAR + Math.round(pos.value))
 .ys { display: flex; flex-direction: column; gap: 6px; }
 .ys.disabled { opacity: .55; pointer-events: none; }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; container-type: inline-size; }
-/* Årtalet ska alltid rymmas mellan knapparna: skala efter radens bredd (4 siffror ≈ 3,3 em i Unbounded + luft) */
+/* Årtalet skalar efter kortets bredd (4 siffror ≈ 3,3 em i Unbounded + luft) */
 .top .big-year {
   flex: 1; min-width: 0; text-align: center; white-space: nowrap;
-  font-size: 44px;
-  font-size: clamp(32px, calc((100cqw - 2 * 48px - 2 * 8px) / 3.8), 72px);
+  font-size: 56px;
+  font-size: clamp(40px, calc(100cqw / 4.2), 80px);
 }
-.nudge {
-  width: 48px; height: 48px; border-radius: 50%; border: 0; flex: none;
-  background: var(--bg2); color: var(--ink); font: 800 28px/1 Manrope; cursor: pointer;
-}
-.nudge:active { background: var(--card); }
 
 .wheel-wrap { position: relative; margin: 0 -8px 12px; }
 .wheel {
