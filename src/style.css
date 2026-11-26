@@ -1,0 +1,112 @@
+/*
+VOICE: festligt partyspel, kvällsklubb – kort och peppigt.
+IDEA: en vinylsingel och en jukebox-skala med årtal.
+PICTURE: snurrande vinylskiva med progressring, skivomslaget blir etikett vid avslöjandet.
+COLOUR and TYPE: djup aubergine-lila mark, varm gul skala, rosa accent. Unbounded + Manrope.
+LAYOUT: en kolumn för mobil, skivan överst, reglaget i tumzonen längst ner.
+*/
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&family=Unbounded:wght@600;800&display=swap');
+
+:root {
+  --bg: #1b0f3b;
+  --bg2: #2a1757;
+  --card: #2f1b61;
+  --ink: #fff7e8;
+  --muted: #c3b5e6;
+  --gold: #ffd23f;
+  --pink: #ff4f8b;
+  --mint: #5ef2c2;
+  --line: rgba(255, 255, 255, 0.12);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; min-width: 0; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: radial-gradient(120% 70% at 50% 0%, #3b1f7a 0%, var(--bg) 60%) fixed, var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 Manrope, system-ui, sans-serif;
+  overflow-x: clip;
+  -webkit-tap-highlight-color: transparent;
+}
+#app {
+  max-width: 520px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  padding: max(16px, env(safe-area-inset-top)) 18px max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+h1, h2, h3 { font-family: Unbounded, system-ui, sans-serif; line-height: 1.05; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(34px, 10vw, 46px); }
+h2 { font-size: 26px; }
+h3 { font-size: 18px; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 14px; }
+.center { text-align: center; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.grow { flex: 1; }
+.spacer { flex: 1; }
+
+.btn {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  min-height: 54px;
+  padding: 0 24px;
+  font: 800 17px/1 Manrope, sans-serif;
+  color: #21103f;
+  background: var(--gold);
+  box-shadow: 0 6px 0 #c99a10;
+  cursor: pointer;
+  transition: transform .08s, box-shadow .08s;
+  width: 100%;
+}
+.btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #c99a10; }
+.btn:disabled { opacity: .45; cursor: default; transform: none; }
+.btn.pink { background: var(--pink); color: #fff; box-shadow: 0 6px 0 #b8275b; }
+.btn.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+.btn.small { min-height: 44px; font-size: 15px; width: auto; box-shadow: none; }
+.btn:focus-visible, input:focus-visible, .chip:focus-visible { outline: 3px solid var(--mint); outline-offset: 3px; }
+
+.card {
+  background: var(--card);
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 30px rgba(0,0,0,.25);
+}
+input[type=text] {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 14px;
+  border: 2px solid var(--line);
+  background: var(--bg2);
+  color: var(--ink);
+  font: 600 17px Manrope, sans-serif;
+  padding: 0 14px;
+}
+input.code { text-transform: uppercase; letter-spacing: .3em; font-family: Unbounded, sans-serif; text-align: center; font-size: 24px; }
+label.field { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+
+.chip {
+  border: 0; border-radius: 999px; min-height: 44px; padding: 0 16px;
+  background: var(--bg2); color: var(--ink); font: 700 15px Manrope, sans-serif; cursor: pointer;
+}
+.chip.on { background: var(--gold); color: #21103f; }
+
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.list li { display: flex; align-items: center; gap: 12px; background: var(--bg2); border-radius: 14px; padding: 10px 14px; min-height: 52px; }
+.list .pts { margin-left: auto; font-family: Unbounded, sans-serif; font-size: 18px; white-space: nowrap; }
+.place { font-family: Unbounded, sans-serif; width: 26px; color: var(--muted); }
+.tag { font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--pink); color: #fff; }
+.tag.gold { background: var(--gold); color: #21103f; }
+.tag.mint { background: var(--mint); color: #08302a; }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
+.topbar .back { background: none; border: 0; color: var(--muted); font: 700 15px Manrope; min-height: 44px; padding: 0; cursor: pointer; }
+.big-year { font-family: Unbounded, sans-serif; font-size: clamp(56px, 20vw, 84px); line-height: 1; color: var(--gold); letter-spacing: -.02em; }
+.error { background: #5a1530; border-radius: 14px; padding: 12px 14px; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

@@ -1,0 +1,82 @@
+import { SONGS, type Song } from './songs'
+
+/**
+ * Poäng: mest poäng vinner.
+ * - Träffsäkerhet: 100 p för exakt rätt år, 10 p mindre per år fel (0 p vid 10+ år fel).
+ * - Snabbhetsbonus (online): upp till +50 p. Skalas med träffsäkerheten,
+ *   så en snabb men vild gissning ger nästan ingen bonus.
+ */
+export const MAX_POINTS = 100
+export const POINTS_PER_YEAR = 10
+export const SPEED_BONUS = 50
+
+export function yearDiff(guess: number | null | undefined, year: number): number | null {
+  return guess == null ? null : Math.abs(Math.round(guess) - year)
+}
+
+export function accuracyPoints(guess: number | null | undefined, year: number): number {
+  const d = yearDiff(guess, year)
+  return d == null ? 0 : Math.max(0, MAX_POINTS - d * POINTS_PER_YEAR)
+}
+
+/** 1 = svarade direkt, 0 = svarade i sista stund. */
+export function speedFactor(elapsedMs: number, windowMs: number): number {
+  if (windowMs <= 0) return 0
+  return 1 - Math.min(1, Math.max(0, elapsedMs / windowMs))
+}
+
+export function speedBonus(guess: number | null | undefined, year: number, speed?: number | null): number {
+  if (speed == null) return 0
+  return Math.round((SPEED_BONUS * accuracyPoints(guess, year) * Math.min(1, Math.max(0, speed))) / MAX_POINTS)
+}
+
+/** Totala poäng för en gissning. `speed` (0–1) utelämnas där snabbhet inte räknas. */
+export function points(guess: number | null | undefined, year: number, speed?: number | null): number {
+  return accuracyPoints(guess, year) + speedBonus(guess, year, speed)
+}
+
+export function shuffle<T>(arr: T[], rnd = Math.random): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+/** Blandar låtlistan. Några extra tas med som reserv om ett ljudklipp saknas. */
+export function drawSongs(count: number, rnd = Math.random): Song[] {
+  return shuffle(SONGS, rnd).slice(0, Math.min(SONGS.length, count + 15))
+}
+
+export interface Ranked {
+  id: string
+  name: string
+  total: number
+  place: number
+}
+
+/** Sorterar fallande (flest poäng först). Lika poäng delar placering. */
+export function rank(players: { id: string; name: string }[], totals: Record<string, number>): Ranked[] {
+  const sorted = players
+    .map((p) => ({ ...p, total: totals[p.id] ?? 0 }))
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'sv'))
+  let place = 0
+  let prev = -1
+  return sorted.map((p, i) => {
+    if (p.total !== prev) {
+      place = i + 1
+      prev = p.total
+    }
+    return { ...p, place }
+  })
+}
+
+export function verdict(diff: number | null): string {
+  if (diff == null) return 'Missade'
+  if (diff === 0) return 'Exakt rätt!'
+  if (diff <= 2) return 'Supernära'
+  if (diff <= 5) return 'Nära'
+  if (diff <= 10) return 'Sådär'
+  return 'Långt bort'
+}
