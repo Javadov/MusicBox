@@ -21,7 +21,8 @@ export default defineConfig({
   plugins: [
     vue(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // App.vue bestämmer när den nya versionen tas i bruk (aldrig mitt i ett spel)
+      registerType: 'prompt',
       includeAssets: ['icon.svg'],
       manifest: {
         name: 'Gissa året',
