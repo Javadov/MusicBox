@@ -62,6 +62,11 @@ async function startAudio() {
   if (!ok && Date.now() - r.startAt.value < CLIP_SECONDS * 1000 - 500) blocked.value = true
 }
 
+// Skicka året på hjulet löpande, så det räknas om man glömmer trycka Klar!
+watch([year, touched], ([y, t]) => {
+  if (t) room.value?.draft(y)
+})
+
 const pushSettings = () =>
   room.value?.hostSettings(count.value, audioAll.value, guessSeconds.value, guessDuring.value)
 watch([count, audioAll, guessSeconds, guessDuring], pushSettings)
@@ -91,7 +96,10 @@ const revealRows = computed(() => {
   return st.players
     .map((p) => {
       const g = st.reveal!.guesses[p.id]
-      return { ...p, g, diff: yearDiff(g, st.reveal!.y), pts: st.reveal!.pts[p.id] ?? 0, bonus: st.reveal!.bonus?.[p.id] ?? 0 }
+      return {
+        ...p, g, diff: yearDiff(g, st.reveal!.y), pts: st.reveal!.pts[p.id] ?? 0,
+        bonus: st.reveal!.bonus?.[p.id] ?? 0, auto: !!st.reveal!.auto?.[p.id],
+      }
     })
     .sort((a, b) => b.pts - a.pts)
 })
@@ -232,7 +240,7 @@ onBeforeUnmount(() => {
       <ul class="list">
         <li v-for="r in revealRows" :key="r.id">
           <strong>{{ r.name }}</strong>
-          <span class="muted">{{ r.g ?? 'ingen gissning' }}</span>
+          <span class="muted">{{ r.g ?? 'ingen gissning' }}<small v-if="r.auto" title="Tryckte inte Klar! – året på hjulet räknades, utan snabbhetsbonus"> · ej klar</small></span>
           <span class="tag" :class="{ gold: r.diff != null && r.diff <= 2 }">{{ verdict(r.diff) }}</span>
           <span class="pts">+{{ r.pts }}<small v-if="r.bonus" class="muted" title="Snabbhetsbonus"> ⚡{{ r.bonus }}</small></span>
         </li>

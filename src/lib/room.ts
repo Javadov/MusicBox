@@ -41,6 +41,8 @@ export interface RoomState {
     pts: Record<string, number>
     /** varav snabbhetsbonus */
     bonus: Record<string, number>
+    /** true = spelaren rörde hjulet men tryckte aldrig Klar!, året på hjulet räknades (utan bonus) */
+    auto?: Record<string, boolean>
   }
   totals: Record<string, number>
   players: Player[]
@@ -79,6 +81,9 @@ export function useRoom(code: string, name: string, isHost: boolean) {
   let guesses: Record<string, number | null> = {}
   /** ms från klippstart till att gissningen kom fram till värden */
   let guessTimes: Record<string, number> = {}
+  /** året som står på hjulet hos spelare som rört det men inte tryckt Klar! */
+  let drafts: Record<string, number> = {}
+  let draftTimer: ReturnType<typeof setTimeout> | undefined
   let revealTimer: ReturnType<typeof setTimeout> | undefined
 
   const onState = ref<((s: RoomState) => void) | null>(null)
@@ -120,6 +125,9 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     })
     ch.on('broadcast', { event: 'guess' }, ({ payload }) => {
       if (isHost) hostGuess(payload.id, payload.roundId, payload.year)
+    })
+    ch.on('broadcast', { event: 'draft' }, ({ payload }) => {
+      if (isHost) hostDraft(payload.id, payload.roundId, payload.year)
     })
     const connectTimer = setTimeout(() => {
       if (!connected.value && !error.value)
@@ -177,6 +185,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
   }
 
   function leave() {
+    clearTimeout(draftTimer)
     if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible)
     clearTimeout(revealTimer)
     channel.value?.unsubscribe()
@@ -188,8 +197,23 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     const s = state.value
     if (!s || s.phase !== 'listen' || myGuess.value?.roundId === s.roundId) return
     myGuess.value = { roundId: s.roundId, year }
+    clearTimeout(draftTimer)
     if (isHost) hostGuess(me.id, s.roundId, year)
     else channel.value?.send({ type: 'broadcast', event: 'guess', payload: { id: me.id, roundId: s.roundId, year } })
+  }
+
+  /** Året som står på hjulet just nu (spelaren har rört det men inte tryckt Klar!). */
+  function draft(year: number) {
+    const s = state.value
+    if (!s || s.phase !== 'listen' || myGuess.value?.roundId === s.roundId) return
+    if (isHost) return hostDraft(me.id, s.roundId, year)
+    // samla ihop snabba ändringar medan man drar
+    clearTimeout(draftTimer)
+    const roundId = s.roundId
+    draftTimer = setTimeout(
+      () => channel.value?.send({ type: 'broadcast', event: 'draft', payload: { id: me.id, roundId, year } }),
+      250,
+    )
   }
 
   // ---------- Värd ----------
@@ -248,6 +272,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     if (songs[songIdx]) findClip(songs[songIdx])
     guesses = {}
     guessTimes = {}
+    drafts = {}
     hostStartAt = Date.now() + START_DELAY
     const ns: RoomState = {
       ...base(),
@@ -277,16 +302,25 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     }
   }
 
+  function hostDraft(id: string, roundId: string, year: number) {
+    const s = state.value
+    if (!s || s.phase !== 'listen' || s.roundId !== roundId || id in guesses) return
+    drafts[id] = year
+  }
+
   function hostReveal() {
     const s = base()
     if (s.phase !== 'listen' || !current) return
     const g: Record<string, number | null> = {}
     const pts: Record<string, number> = {}
     const bonus: Record<string, number> = {}
+    const auto: Record<string, boolean> = {}
     const totals = { ...s.totals }
     const windowMs = s.guessSeconds * 1000
     for (const p of s.players) {
-      g[p.id] = guesses[p.id] ?? null
+      // Tryckte inte Klar! men rörde hjulet → året på hjulet räknas, utan snabbhetsbonus
+      auto[p.id] = !(p.id in guesses) && p.id in drafts
+      g[p.id] = guesses[p.id] ?? drafts[p.id] ?? null
       const speed = p.id in guessTimes ? speedFactor(guessTimes[p.id], windowMs) : null
       pts[p.id] = points(g[p.id], current.y, speed)
       bonus[p.id] = speedBonus(g[p.id], current.y, speed)
@@ -296,7 +330,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
       ...s,
       phase: 'reveal',
       totals,
-      reveal: { a: current.a, t: current.t, y: current.y, artwork: current.artwork, guesses: g, pts, bonus },
+      reveal: { a: current.a, t: current.t, y: current.y, artwork: current.artwork, guesses: g, pts, bonus, auto },
     })
   }
 
@@ -324,6 +358,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     connect,
     leave,
     guess,
+    draft,
     hostSettings,
     hostStart,
     hostNext,

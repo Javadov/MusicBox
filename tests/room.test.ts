@@ -117,4 +117,29 @@ describe('onlinerum', () => {
     expect(host.state.value?.phase).toBe('reveal')
     vi.useRealTimers()
   })
+
+  it('räknar året på hjulet (utan bonus) om man rört det men glömt trycka Klar!', async () => {
+    vi.useFakeTimers()
+    const host = useRoom('5555', 'Värd', true)
+    host.connect(); await tick(1)
+    const guest = useRoom('5555', 'Gäst', false)
+    guest.connect(); await tick(1)
+    const sara = useRoom('5555', 'Sara', false)
+    sara.connect(); await tick(1)
+    host.hostSettings(10, true, 10, true); await tick(1)
+    host.hostStart(); await tick(1)
+    await tick(3000) // låten startar
+    host.guess(2000) // tryckte Klar! direkt
+    guest.draft(1990); await tick(100); guest.draft(1995) // drar, men trycker aldrig Klar!
+    // Sara rör aldrig hjulet
+    await tick(11000) // tiden är ute
+    const r = host.state.value!.reveal!
+    expect(r.guesses[guest.me.id]).toBe(1995)
+    expect(r.auto?.[guest.me.id]).toBe(true)
+    expect(r.bonus[guest.me.id]).toBe(0)
+    expect(r.auto?.[host.me.id]).toBe(false)
+    expect(r.guesses[sara.me.id]).toBeNull()
+    expect(r.pts[sara.me.id]).toBe(0)
+    vi.useRealTimers()
+  })
 })
