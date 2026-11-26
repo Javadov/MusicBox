@@ -1,7 +1,7 @@
 // Vercel-funktion: söker i iTunes från servern.
 // iTunes omdirigerar anrop från iPhone till musics:// (Apple Music-appen),
 // så webbläsaren kan inte fråga iTunes direkt på iOS.
-const COUNTRIES = new Set(['SE', 'US'])
+const COUNTRIES = new Set(['SE', 'US', 'GB', 'TR', 'AZ', 'DE'])
 
 export async function GET(request) {
   const params = new URL(request.url).searchParams

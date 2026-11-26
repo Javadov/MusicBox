@@ -5,8 +5,8 @@ import YearSlider from '../components/YearSlider.vue'
 import Standings from '../components/Standings.vue'
 import { CLIP_SECONDS, playClip, stopClip, unlockAudio } from '../lib/audio'
 import { drawSongs, points, verdict, yearDiff } from '../lib/game'
-import { findClip, type Clip } from '../lib/itunes'
-import type { Song } from '../lib/songs'
+import { correctedYear, findClip, type Clip } from '../lib/itunes'
+import { DEFAULT_LIST, LISTS, getList, loadSongs, type ListId, type Song } from '../lib/songs'
 import { useNow } from '../lib/useNow'
 
 defineEmits<{ exit: [] }>()
@@ -16,6 +16,7 @@ const MID = 1992
 const phase = ref<Phase>('setup')
 const players = ref([{ id: 'p1', name: 'Spelare 1' }])
 const count = ref(10)
+const list = ref<ListId>(DEFAULT_LIST)
 const round = ref(0)
 const totals = ref<Record<string, number>>({})
 const guesses = ref<Record<string, number>>({})
@@ -52,7 +53,13 @@ async function start() {
   await unlockAudio()
   players.value = players.value.map((p, i) => ({ ...p, name: p.name.trim() || `Spelare ${i + 1}` }))
   totals.value = Object.fromEntries(players.value.map((p) => [p.id, 0]))
-  songs = drawSongs(count.value)
+  phase.value = 'loading'
+  try {
+    songs = drawSongs(await loadSongs(list.value), count.value)
+  } catch {
+    error.value = 'Kunde inte ladda låtlistan.'
+    return finish()
+  }
   songIdx = 0
   round.value = 0
   next()
@@ -66,14 +73,14 @@ async function next() {
   let song: Song | undefined
   while (!clip && songIdx < songs.length) {
     song = songs[songIdx++]
-    clip = await findClip(song)
+    clip = await findClip(song, getList(list.value).countries)
   }
   if (!clip || !song) {
     error.value = 'Kunde inte hämta ljudklipp. Kolla internetanslutningen.'
     return finish()
   }
-  if (songs[songIdx]) findClip(songs[songIdx]) // förladda nästa
-  current.value = { ...song, ...clip }
+  if (songs[songIdx]) findClip(songs[songIdx], getList(list.value).countries) // förladda nästa
+  current.value = { ...song, ...clip, y: correctedYear(song, clip) }
   guesses.value = {}
   turn.value = 0
   year.value = MID
@@ -133,6 +140,10 @@ onBeforeUnmount(stopClip)
       <button class="btn ghost small" :disabled="players.length >= 10" @click="addPlayer">+ Lägg till spelare</button>
     </section>
     <section class="card stack">
+      <h3>Låtlista</h3>
+      <div class="row wrap">
+        <button v-for="l in LISTS" :key="l.id" class="chip" :class="{ on: list === l.id }" @click="list = l.id">{{ l.flag }} {{ l.label }}</button>
+      </div>
       <div class="row"><h3 class="grow">Antal låtar</h3><span class="big">{{ count }}</span></div>
       <input id="count" v-model.number="count" type="range" min="10" max="100" step="5" class="plain" aria-label="Antal låtar" />
       <div class="row">

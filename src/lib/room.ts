@@ -1,9 +1,9 @@
 import { ref, shallowRef } from 'vue'
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
 import { drawSongs, points, speedBonus, speedFactor } from './game'
-import { findClip } from './itunes'
+import { correctedYear, findClip } from './itunes'
 import { CLIP_SECONDS } from './audio'
-import type { Song } from './songs'
+import { DEFAULT_LIST, getList, loadSongs, type ListId, type Song } from './songs'
 
 // ---------- Supabase ----------
 const env = import.meta.env
@@ -30,6 +30,8 @@ export interface RoomState {
   guessDuring?: boolean
   /** hur länge låten spelar, i sekunder (10/20/30) */
   clipSeconds?: number
+  /** vilken låtlista som spelas */
+  list?: ListId
   /** ms tills klippet startar, räknat från när meddelandet skickades */
   startIn?: number
   clipUrl?: string
@@ -49,6 +51,9 @@ export interface RoomState {
   totals: Record<string, number>
   players: Player[]
 }
+
+/** Det värden kan ställa in i lobbyn. */
+export type RoomSettings = Pick<RoomState, 'total' | 'audioAll' | 'guessSeconds' | 'guessDuring' | 'clipSeconds' | 'list'>
 
 export const CODE_LENGTH = 4
 export const makeCode = () =>
@@ -233,6 +238,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
         guessSeconds: 20,
         guessDuring: false,
         clipSeconds: CLIP_SECONDS,
+        list: DEFAULT_LIST,
         totals: {},
         players: [],
       }
@@ -245,23 +251,22 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     send({ ...s, players: present.value.map(({ id, name }) => ({ id, name })) })
   }
 
-  function hostSettings(
-    total: number,
-    audioAll: boolean,
-    guessSeconds: number,
-    guessDuring = false,
-    clipSeconds = CLIP_SECONDS,
-  ) {
-    const s = base()
-    send({ ...s, total, audioAll, guessSeconds, guessDuring, clipSeconds })
+  function hostSettings(settings: Partial<RoomSettings>) {
+    send({ ...base(), ...settings })
   }
 
-  function hostStart() {
+  async function hostStart() {
     const s = base()
     const players = present.value.map(({ id, name }) => ({ id, name }))
-    songs = drawSongs(s.total)
+    // visa "laddar" direkt medan låtlistan hämtas
+    send({ ...s, phase: 'loading', players, totals: Object.fromEntries(players.map((p) => [p.id, 0])), round: 0 })
+    try {
+      songs = drawSongs(await loadSongs(s.list ?? DEFAULT_LIST), s.total)
+    } catch {
+      error.value = 'Kunde inte ladda låtlistan.'
+      return hostFinal()
+    }
     songIdx = 0
-    send({ ...s, players, totals: Object.fromEntries(players.map((p) => [p.id, 0])), round: 0 })
     hostNext()
   }
 
@@ -270,18 +275,19 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     if (s.round >= s.total) return hostFinal()
     clearTimeout(revealTimer)
     send({ ...s, phase: 'loading', reveal: undefined })
+    const countries = getList(s.list).countries
     let clip = null
     while (!clip && songIdx < songs.length) {
       current = songs[songIdx++]
-      clip = await findClip(current)
-      if (clip) current = { ...current, artwork: clip.artwork }
+      clip = await findClip(current, countries)
+      if (clip) current = { ...current, y: correctedYear(current, clip), artwork: clip.artwork }
     }
     if (!clip || !current) {
       error.value = 'Kunde inte hämta fler ljudklipp.'
       return hostFinal()
     }
     // förladda nästa i bakgrunden
-    if (songs[songIdx]) findClip(songs[songIdx])
+    if (songs[songIdx]) findClip(songs[songIdx], countries)
     guesses = {}
     guessTimes = {}
     drafts = {}

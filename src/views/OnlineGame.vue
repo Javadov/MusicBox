@@ -6,6 +6,7 @@ import Standings from '../components/Standings.vue'
 import { CLIP_SECONDS, playClip, stopClip, unlockAudio } from '../lib/audio'
 import { verdict, yearDiff } from '../lib/game'
 import { CODE_LENGTH, clipLength, guessWindow, makeCode, useRoom } from '../lib/room'
+import { DEFAULT_LIST, LISTS, getList, type ListId } from '../lib/songs'
 import { useNow } from '../lib/useNow'
 
 const props = defineProps<{ mode: 'host' | 'join' }>()
@@ -28,6 +29,7 @@ const audioAll = ref(true)
 const guessSeconds = ref(20)
 const guessDuring = ref(false)
 const clipSeconds = ref(CLIP_SECONDS)
+const list = ref<ListId>(DEFAULT_LIST)
 
 // I läget "direkt" måste gissningstiden räcka hela låten – justera det andra valet automatiskt
 function setClip(n: number) {
@@ -83,8 +85,15 @@ watch([year, touched], ([y, t]) => {
 })
 
 const pushSettings = () =>
-  room.value?.hostSettings(count.value, audioAll.value, guessSeconds.value, guessDuring.value, clipSeconds.value)
-watch([count, audioAll, guessSeconds, guessDuring, clipSeconds], pushSettings)
+  room.value?.hostSettings({
+    total: count.value,
+    audioAll: audioAll.value,
+    guessSeconds: guessSeconds.value,
+    guessDuring: guessDuring.value,
+    clipSeconds: clipSeconds.value,
+    list: list.value,
+  })
+watch([count, audioAll, guessSeconds, guessDuring, clipSeconds, list], pushSettings)
 watch(
   () => room.value?.connected.value,
   (c) => c && isHost && pushSettings(),
@@ -174,6 +183,7 @@ onBeforeUnmount(() => {
         <p class="muted">Rumskod</p>
         <button class="roomcode" @click="copyCode" aria-label="Kopiera rumskod">{{ code }}</button>
         <p class="muted small">Alla öppnar appen, väljer ”Gå med i rum” och skriver koden.</p>
+        <p v-if="!isHost" class="small">Låtlista: <strong>{{ getList(s.list).flag }} {{ getList(s.list).label }}</strong></p>
       </section>
       <section class="card stack">
         <h3>Spelare ({{ room.present.value.length }})</h3>
@@ -187,6 +197,10 @@ onBeforeUnmount(() => {
       </section>
       <template v-if="isHost">
         <section class="card stack">
+          <h3>Låtlista</h3>
+          <div class="row wrap">
+            <button v-for="l in LISTS" :key="l.id" class="chip" :class="{ on: list === l.id }" @click="list = l.id">{{ l.flag }} {{ l.label }}</button>
+          </div>
           <div class="row"><h3 class="grow">Antal låtar</h3><span class="big">{{ count }}</span></div>
           <input id="count" v-model.number="count" type="range" min="10" max="100" step="5" class="plain" aria-label="Antal låtar" />
           <h3>Ljud</h3>

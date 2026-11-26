@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Vinyl from '../components/Vinyl.vue'
 import { supabase } from '../lib/room'
-import { SONGS } from '../lib/songs'
+import { LISTS } from '../lib/songs'
 defineEmits<{ go: [view: 'local' | 'host' | 'join'] }>()
 const online = !!supabase
 </script>
@@ -18,7 +18,7 @@ const online = !!supabase
     <button id="btn-host" class="btn pink" :disabled="!online" @click="$emit('go', 'host')">Skapa rum</button>
     <button id="btn-join" class="btn ghost" :disabled="!online" @click="$emit('go', 'join')">Gå med i rum</button>
     <p v-if="!online" class="muted small center">Onlineläget kräver Supabase-nycklar i <code>.env</code>.</p>
-    <p class="muted small center">{{ SONGS.length }} låtar från 1960 till idag · Ljudklipp från iTunes</p>
+    <p class="muted small center">Tusentals låtar från 1960 till idag · {{ LISTS.map((l) => l.flag).join(' ') }} · Ljudklipp från iTunes</p>
   </div>
 </template>
 

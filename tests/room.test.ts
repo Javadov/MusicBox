@@ -24,7 +24,10 @@ class FakeChannel {
   unsubscribe() {}
 }
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ channel: (n: string, o: any) => new FakeChannel(n, o) }) }))
-vi.mock('../src/lib/itunes', () => ({ findClip: async () => ({ previewUrl: 'https://x/clip.m4a', artwork: 'a.jpg' }) }))
+vi.mock('../src/lib/itunes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/lib/itunes')>()),
+  findClip: async () => ({ previewUrl: 'https://x/clip.m4a', artwork: 'a.jpg' }),
+}))
 
 let useRoom: typeof import('../src/lib/room').useRoom
 let makeCode: typeof import('../src/lib/room').makeCode
@@ -33,6 +36,7 @@ beforeAll(async () => {
   vi.stubEnv('VITE_SUPABASE_URL', 'https://fake.supabase.co')
   vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'fake')
   ;({ useRoom, makeCode, guessWindow } = await import('../src/lib/room'))
+  await (await import('../src/lib/songs')).loadSongs('international') // ladda listan innan tiden fryses
 })
 const tick = (ms = 0) => vi.advanceTimersByTimeAsync(ms)
 
@@ -47,7 +51,7 @@ describe('onlinerum', () => {
     expect(guest.state.value?.phase).toBe('lobby')
     expect(host.present.value.map((p) => p.name).sort()).toEqual(['Elvin', 'Sara'])
 
-    host.hostSettings(10, true, 20); await tick(1)
+    host.hostSettings({ total: 10, audioAll: true, guessSeconds: 20 }); await tick(1)
     expect(guest.state.value?.total).toBe(10)
 
     for (let round = 1; round <= 10; round++) {
@@ -90,7 +94,7 @@ describe('onlinerum', () => {
     expect(guest.reconnecting.value).toBe(true)
     expect(guest.error.value).toBe('') // ingen röd felruta
 
-    host.hostSettings(20, false, 30); await tick(1) // gästen missar inget viktigt, men får läget vid återanslutning
+    host.hostSettings({ total: 20, audioAll: false, guessSeconds: 30 }); await tick(1) // gästen missar inget viktigt, men får läget vid återanslutning
     guestCh.statusCb('SUBSCRIBED'); await tick(1)
     expect(guest.reconnecting.value).toBe(false)
     expect(guest.state.value?.total).toBe(20)
@@ -111,7 +115,7 @@ describe('onlinerum', () => {
     vi.useFakeTimers()
     const host = useRoom('7777', 'Värd', true)
     host.connect(); await tick(1)
-    host.hostSettings(10, true, 10, true); await tick(1)
+    host.hostSettings({ total: 10, audioAll: true, guessSeconds: 10, guessDuring: true }); await tick(1)
     host.hostStart(); await tick(1)
     expect(host.state.value?.guessDuring).toBe(true)
     await tick(3000 + 9000)
@@ -129,7 +133,7 @@ describe('onlinerum', () => {
     guest.connect(); await tick(1)
     const sara = useRoom('5555', 'Sara', false)
     sara.connect(); await tick(1)
-    host.hostSettings(10, true, 10, true); await tick(1)
+    host.hostSettings({ total: 10, audioAll: true, guessSeconds: 10, guessDuring: true }); await tick(1)
     host.hostStart(); await tick(1)
     await tick(3000) // låten startar
     host.guess(2000) // tryckte Klar! direkt
@@ -150,7 +154,7 @@ describe('onlinerum', () => {
     vi.useFakeTimers()
     const host = useRoom('4444', 'Värd', true)
     host.connect(); await tick(1)
-    host.hostSettings(10, true, 10, false, 30); await tick(1) // 30 s låt, sedan 10 s att gissa
+    host.hostSettings({ total: 10, audioAll: true, guessSeconds: 10, clipSeconds: 30 }); await tick(1) // 30 s låt, sedan 10 s att gissa
     host.hostStart(); await tick(1)
     expect(host.state.value?.clipSeconds).toBe(30)
     host.guess(1999) // alla har gissat – men låten ska få spela klart

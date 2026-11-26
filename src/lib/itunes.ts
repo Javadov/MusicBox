@@ -1,15 +1,21 @@
-import type { Song } from './songs'
+import { MIN_YEAR, type Song } from './songs'
 
 export interface Clip {
   previewUrl: string
   artwork?: string
+  /** tidigaste utgivningsår i iTunes för just den här låten (samma artist + titel) */
+  year?: number
 }
 
 const cache = new Map<string, Clip | null>()
 
+// Bokstäver som inte delas upp av NFD (turkiska ı, azerbajdzjanska ə m.fl.)
+const SPECIAL: Record<string, string> = { ı: 'i', ə: 'e', ø: 'o', æ: 'ae', ß: 'ss', đ: 'd', ł: 'l', œ: 'oe' }
+
 const norm = (s: string) =>
   s
     .toLowerCase()
+    .replace(/[ıəøæßđłœ]/g, (c) => SPECIAL[c])
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/\(.*?\)|\[.*?\]/g, '')
@@ -22,6 +28,7 @@ interface ItunesResult {
   trackName: string
   previewUrl?: string
   artworkUrl100?: string
+  releaseDate?: string
 }
 
 // JSONP: iTunes Search API stöder ?callback=, så vi slipper CORS-problem.
@@ -53,24 +60,48 @@ function jsonp<T>(url: string, timeoutMs = 8000): Promise<T> {
   })
 }
 
-export function pickBest(song: Song, results: ItunesResult[]): ItunesResult | undefined {
+function matchers(song: Song) {
   const artist = norm(song.a)
   const title = norm(song.t)
-  const withPreview = results.filter((r) => r.previewUrl)
   const artistOk = (r: ItunesResult) => {
     const ra = norm(r.artistName)
-    return ra.includes(artist) || artist.includes(ra)
+    return !!ra && (ra.includes(artist) || artist.includes(ra))
   }
   const titleOk = (r: ItunesResult) => {
     const rt = norm(r.trackName)
-    return rt === title || rt.startsWith(title) || title.startsWith(rt)
+    return !!rt && (rt === title || rt.startsWith(title) || title.startsWith(rt))
   }
+  return { artistOk, titleOk }
+}
+
+/** Tidigaste utgivningsår bland iTunes-träffar som är samma låt (artist + titel). */
+export function earliestYear(song: Song, results: ItunesResult[]): number | undefined {
+  const { artistOk, titleOk } = matchers(song)
+  const years = results
+    .filter((r) => artistOk(r) && titleOk(r) && r.releaseDate)
+    .map((r) => new Date(r.releaseDate!).getUTCFullYear())
+    .filter((y) => y >= MIN_YEAR)
+  return years.length ? Math.min(...years) : undefined
+}
+
+/**
+ * Året som ska gälla för låten. Osäkra år (`u`) rättas om iTunes har en tidigare
+ * utgåva av samma låt – en låt kan inte ha getts ut innan den släpptes.
+ */
+export function correctedYear(song: Song, clip?: Clip | null): number {
+  return song.u && clip?.year && clip.year < song.y ? clip.year : song.y
+}
+
+export function pickBest(song: Song, results: ItunesResult[]): ItunesResult | undefined {
+  const { artistOk, titleOk } = matchers(song)
+  const withPreview = results.filter((r) => r.previewUrl)
   const bad = /\b(karaoke|instrumental|cover|tribute|remix|live|acoustic|made famous)\b/i
   const clean = (r: ItunesResult) => !bad.test(r.trackName) || bad.test(song.t)
+  // Bara samma låt räknas – en annan låt av samma artist skulle ge fel facit (titel och år).
+  // Saknas låten hoppar spelet till nästa i listan.
   return (
     withPreview.find((r) => artistOk(r) && titleOk(r) && clean(r)) ??
-    withPreview.find((r) => artistOk(r) && titleOk(r)) ??
-    withPreview.find((r) => artistOk(r) && clean(r))
+    withPreview.find((r) => artistOk(r) && titleOk(r))
   )
 }
 
@@ -99,12 +130,12 @@ async function search(term: string, country: string): Promise<SearchResponse> {
   )
 }
 
-export async function findClip(song: Song): Promise<Clip | null> {
+export async function findClip(song: Song, countries: string[] = ['SE', 'US']): Promise<Clip | null> {
   const key = `${song.a}|${song.t}`
   if (cache.has(key)) return cache.get(key)!
   const term = `${song.a} ${song.t}`
   let clip: Clip | null = null
-  for (const country of ['SE', 'US']) {
+  for (const country of countries) {
     try {
       const data = await search(term, country)
       const best = pickBest(song, data.results ?? [])
@@ -112,6 +143,7 @@ export async function findClip(song: Song): Promise<Clip | null> {
         clip = {
           previewUrl: best.previewUrl,
           artwork: best.artworkUrl100?.replace('100x100', '400x400'),
+          year: earliestYear(song, data.results ?? []),
         }
         break
       }

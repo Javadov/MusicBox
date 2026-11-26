@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { points, rank, drawSongs, accuracyPoints, speedBonus, speedFactor, verdict, yearDiff } from '../src/lib/game'
 import { pickBest } from '../src/lib/itunes'
-import { SONGS, MIN_YEAR, MAX_YEAR } from '../src/lib/songs'
+import { LISTS, MIN_YEAR, MAX_YEAR, loadSongs } from '../src/lib/songs'
+import { correctedYear, earliestYear } from '../src/lib/itunes'
 
 describe('poäng', () => {
   it('ger 100 p för rätt år och 10 p mindre per år fel', () => {
@@ -33,16 +34,49 @@ describe('poäng', () => {
   })
 })
 
-describe('låtlista', () => {
-  it('har giltiga år och inga dubbletter', () => {
-    const keys = new Set(SONGS.map((s) => `${s.a}|${s.t}`.toLowerCase()))
-    expect(keys.size).toBe(SONGS.length)
-    for (const s of SONGS) expect(s.y >= MIN_YEAR && s.y <= MAX_YEAR).toBe(true)
-    expect(SONGS.length).toBeGreaterThanOrEqual(100)
+describe('låtlistor', () => {
+  for (const list of LISTS) {
+    it(`${list.label}: giltiga år och inga dubbletter`, async () => {
+      const songs = await loadSongs(list.id)
+      expect(songs.length).toBeGreaterThanOrEqual(50)
+      const keys = new Set(songs.map((s) => `${s.a}|${s.t}`.toLowerCase()))
+      expect(keys.size).toBe(songs.length)
+      for (const s of songs) {
+        expect(s.a && s.t).toBeTruthy()
+        expect(s.y >= MIN_YEAR && s.y <= MAX_YEAR).toBe(true)
+      }
+    })
+  }
+  it('engelska är internationella utan icke-engelska låtar', async () => {
+    const [intl, en] = await Promise.all([loadSongs('international'), loadSongs('english')])
+    expect(en.length).toBeLessThan(intl.length)
+    expect(en.every((s) => !s.l)).toBe(true)
   })
-  it('drar reservlåtar', () => {
-    expect(drawSongs(10).length).toBe(25)
-    expect(drawSongs(100).length).toBe(Math.min(SONGS.length, 115))
+  it('drar reservlåtar', async () => {
+    const songs = await loadSongs('international')
+    expect(drawSongs(songs, 10).length).toBe(35)
+    const small = songs.slice(0, 20)
+    expect(drawSongs(small, 100).length).toBe(20)
+  })
+})
+
+describe('osäkra år', () => {
+  const r = (artistName: string, trackName: string, releaseDate: string) => ({ artistName, trackName, previewUrl: 'x', releaseDate })
+  it('rättar ett osäkert år när iTunes har en tidigare utgåva av samma låt', () => {
+    const song = { a: 'Röya', t: 'Ağla', y: 2004, u: true }
+    const results = [r('Röya', 'Ağla', '2001-05-01T07:00:00Z'), r('Röya', 'Ağla (Remix)', '2010-01-01T07:00:00Z'), r('Röya', 'Annan låt', '1995-01-01T07:00:00Z')]
+    const year = earliestYear(song, results)
+    expect(year).toBe(2001) // "Annan låt" räknas inte
+    expect(correctedYear(song, { previewUrl: 'x', year })).toBe(2001)
+  })
+  it('rör inte säkra år eller senare iTunes-år', () => {
+    expect(correctedYear({ a: 'A', t: 'B', y: 1990 }, { previewUrl: 'x', year: 1985 })).toBe(1990)
+    expect(correctedYear({ a: 'A', t: 'B', y: 1990, u: true }, { previewUrl: 'x', year: 2005 })).toBe(1990)
+  })
+  it('matchar turkiska och azerbajdzjanska bokstäver', () => {
+    const results = [r('Sezen Aksu', 'Kaç Yıl Geçti Aradan', '1977-01-01T08:00:00Z')]
+    expect(earliestYear({ a: 'Sezen Aksu', t: 'Kaç Yıl Geçti Aradan', y: 1980, u: true }, results)).toBe(1977)
+    expect(earliestYear({ a: 'Zülfiyyə Xanbabayeva', t: 'Sənsiz', y: 2003 }, [r('Zulfiyye Xanbabayeva', 'Sensiz', '2003-01-01T08:00:00Z')])).toBe(2003)
   })
 })
 
@@ -55,6 +89,9 @@ describe('iTunes-matchning', () => {
       r('Bon Jovi', "Livin' On a Prayer"),
     ])
     expect(best?.trackName).toBe("Livin' On a Prayer")
+  })
+  it('väljer aldrig en annan låt av samma artist', () => {
+    expect(pickBest({ a: 'Nilüfer', t: 'Göreceksin Kendini', y: 1979 }, [r('Nilüfer', 'Haram Geceler')])).toBeUndefined()
   })
   it('hanterar parenteser och feat', () => {
     const best = pickBest({ a: 'Mark Ronson', t: 'Uptown Funk', y: 2014 }, [r('Mark Ronson', 'Uptown Funk (feat. Bruno Mars)')])

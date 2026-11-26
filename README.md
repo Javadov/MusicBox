@@ -30,7 +30,8 @@ PWA-installation kräver HTTPS. Deploya `dist/` gratis till Vercel eller Netlify
 ## Struktur
 | Fil | Vad |
 |---|---|
-| `src/lib/songs.ts` | Kurerad låtlista med **originalår** – lägg till fler här |
+| `src/songs/*.json` | Låtlistor med **originalår**: internationell, svenska, turkiska, azerbajdzjanska (engelska räknas fram ur internationell) |
+| `src/lib/songs.ts` | Listornas namn, flaggor och vilka iTunes-butiker som söks |
 | `src/lib/itunes.ts` | Hämtar 30 s-klipp från iTunes Search API (JSONP, ingen nyckel) |
 | `src/lib/audio.ts` | Spelar 10 s, synkad starttid, upplåsning för iOS |
 | `src/lib/room.ts` | Onlinerum: värden styr spelet och skickar läget till alla |
@@ -48,3 +49,10 @@ PWA-installation kräver HTTPS. Deploya `dist/` gratis till Vercel eller Netlify
 ```bash
 npm test   # poäng, låtlista, iTunes-matchning och en simulerad onlinematch
 ```
+
+## Låtlistor
+Format: `{ "a": artist, "t": titel, "y": år }`. Valfritt:
+- `"u": true` – osäkert år. Om iTunes har en tidigare utgåva av samma låt används det året i stället.
+- `"l": "sv"` – språk för icke-engelska låtar i `international.json` (de filtreras bort i listan *Engelska*).
+
+Låtar som inte hittas i iTunes hoppas över automatiskt. Ny lista: lägg en JSON-fil i `src/songs/` och en rad i `LISTS` i `src/lib/songs.ts`.

@@ -1,4 +1,4 @@
-import { SONGS, type Song } from './songs'
+import type { Song } from './songs'
 
 /**
  * Poäng: mest poäng vinner.
@@ -44,9 +44,12 @@ export function shuffle<T>(arr: T[], rnd = Math.random): T[] {
   return a
 }
 
-/** Blandar låtlistan. Några extra tas med som reserv om ett ljudklipp saknas. */
-export function drawSongs(count: number, rnd = Math.random): Song[] {
-  return shuffle(SONGS, rnd).slice(0, Math.min(SONGS.length, count + 15))
+/**
+ * Blandar låtlistan. Extra låtar tas med som reserv om ett ljudklipp saknas
+ * (vanligare i mindre listor, där fler låtar saknas i iTunes).
+ */
+export function drawSongs(songs: Song[], count: number, rnd = Math.random): Song[] {
+  return shuffle(songs, rnd).slice(0, Math.min(songs.length, count * 2 + 15))
 }
 
 export interface Ranked {
