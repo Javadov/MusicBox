@@ -35,9 +35,15 @@ const step = (d: number) => (model.value = Math.min(MAX_YEAR, Math.max(MIN_YEAR,
 <style scoped>
 .ys { display: flex; flex-direction: column; gap: 10px; }
 .ys.disabled { opacity: .55; }
-.top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 8px; container-type: inline-size; }
+/* Årtalet ska alltid rymmas mellan knapparna: skala efter radens bredd (4 siffror ≈ 3,3 em i Unbounded + luft) */
+.top .big-year {
+  flex: 1; min-width: 0; text-align: center; white-space: nowrap;
+  font-size: 44px;
+  font-size: clamp(32px, calc((100cqw - 2 * 48px - 2 * 8px) / 3.8), 72px);
+}
 .nudge {
-  width: 56px; height: 56px; border-radius: 50%; border: 0; flex: none;
+  width: 48px; height: 48px; border-radius: 50%; border: 0; flex: none;
   background: var(--bg2); color: var(--ink); font: 800 28px/1 Manrope; cursor: pointer;
 }
 .nudge:active { background: var(--card); }

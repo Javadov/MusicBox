@@ -86,7 +86,11 @@ async function search(term: string, country: string): Promise<SearchResponse> {
     const t = setTimeout(() => ctrl.abort(), 8000)
     const res = await fetch(`/api/itunes?term=${encodeURIComponent(term)}&country=${country}`, { signal: ctrl.signal })
     clearTimeout(t)
-    if (res.ok && res.headers.get('content-type')?.includes('json')) return await res.json()
+    // iTunes svarar med text/javascript även för ren JSON (lokalt via Vite-proxyn), så tolka texten själv
+    if (res.ok) {
+      const data = JSON.parse(await res.text()) as SearchResponse
+      if (Array.isArray(data?.results)) return data
+    }
   } catch {
     /* prova JSONP */
   }

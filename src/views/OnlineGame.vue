@@ -125,6 +125,12 @@ onBeforeUnmount(() => {
   <p v-else-if="room.error.value" class="error">{{ room.error.value }}</p>
   <p v-else-if="!room.connected.value || !s" class="center muted">Ansluter till rummet…</p>
 
+  <Transition name="toast">
+    <div v-if="room?.reconnecting.value && !room.error.value" class="toast" role="status">
+      <span class="dot" aria-hidden="true" /> Anslutningen bröts – återansluter…
+    </div>
+  </Transition>
+
   <template v-if="room && s">
     <!-- LOBBY -->
     <template v-if="s.phase === 'lobby'">
@@ -228,6 +234,16 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.toast {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; z-index: 10; max-width: calc(100% - 32px);
+  padding: 10px 16px; border-radius: 999px; background: rgba(20, 10, 45, .92); color: var(--ink);
+  font-size: 14px; box-shadow: 0 6px 20px rgba(0,0,0,.4); white-space: nowrap;
+}
+.toast .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+.toast-enter-active, .toast-leave-active { transition: opacity .25s, transform .25s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, 12px); }
 .roomcode {
   background: none; border: 0; cursor: pointer; color: var(--gold);
   font: 800 clamp(48px, 16vw, 68px)/1 Unbounded, sans-serif; letter-spacing: .12em;

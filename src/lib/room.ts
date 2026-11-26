@@ -55,6 +55,8 @@ export function useRoom(code: string, name: string, isHost: boolean) {
   const state = ref<RoomState | null>(null)
   const present = ref<(Player & { host: boolean })[]>([])
   const connected = ref(false)
+  /** true när en tidigare fungerande anslutning tillfälligt har brutits (t.ex. appen låg i bakgrunden) */
+  const reconnecting = ref(false)
   const error = ref('')
   /** lokal Date.now()-tid då klippet startar */
   const startAt = ref(0)
@@ -106,11 +108,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
       if (!isHost) apply(payload as RoomState)
     })
     ch.on('broadcast', { event: 'hello' }, () => {
-      if (isHost && state.value) {
-        const s = { ...state.value }
-        if (s.phase === 'listen') s.startIn = hostStartAt - Date.now()
-        channel.value?.send({ type: 'broadcast', event: 'state', payload: s })
-      }
+      if (isHost) sendSnapshot()
     })
     ch.on('broadcast', { event: 'guess' }, ({ payload }) => {
       if (isHost) hostGuess(payload.id, payload.roundId, payload.year)
@@ -123,24 +121,55 @@ export function useRoom(code: string, name: string, isHost: boolean) {
       if (err) console.error('[realtime]', status, err)
       if (status === 'SUBSCRIBED') {
         clearTimeout(connectTimer)
+        const wasReconnect = connected.value
         connected.value = true
+        reconnecting.value = false
+        error.value = ''
         await ch.track({ name: me.name, host: isHost })
-        if (isHost) hostLobby()
-        else {
+        if (isHost) {
+          hostLobby()
+          if (wasReconnect) sendSnapshot() // gäster kan ha missat något medan värden var borta
+        } else if (wasReconnect) {
+          ch.send({ type: 'broadcast', event: 'hello', payload: {} }) // be värden om senaste läget
+        } else {
           ch.send({ type: 'broadcast', event: 'hello', payload: {} })
           setTimeout(() => {
             if (!state.value) error.value = `Hittade inget rum med koden ${code}.`
           }, 5000)
         }
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || (status === 'CLOSED' && !connected.value)) {
-        clearTimeout(connectTimer)
-        error.value = `Kunde inte ansluta till servern (${status}${err?.message ? ': ' + err.message : ''}).`
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        if (!channel.value) return // vi lämnade rummet själva
+        if (connected.value) {
+          // Har fungerat tidigare – Supabase återansluter av sig själv, visa bara en diskret notis
+          reconnecting.value = true
+        } else {
+          clearTimeout(connectTimer)
+          error.value = `Kunde inte ansluta till servern (${status}${err?.message ? ': ' + err.message : ''}).`
+        }
       }
     })
     channel.value = ch
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible)
+  }
+
+  /** iOS fryser webbsockets i bakgrunden – väck anslutningen direkt när appen visas igen. */
+  function onVisible() {
+    if (document.visibilityState !== 'visible' || !supabase || !channel.value) return
+    if (!supabase.realtime.isConnected()) {
+      reconnecting.value = true
+      supabase.realtime.connect()
+    }
+  }
+
+  function sendSnapshot() {
+    if (!state.value) return
+    const s = { ...state.value }
+    if (s.phase === 'listen') s.startIn = hostStartAt - Date.now()
+    channel.value?.send({ type: 'broadcast', event: 'state', payload: s })
   }
 
   function leave() {
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible)
     clearTimeout(revealTimer)
     channel.value?.unsubscribe()
     channel.value = null
@@ -277,6 +306,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     state,
     present,
     connected,
+    reconnecting,
     error,
     startAt,
     myGuess,

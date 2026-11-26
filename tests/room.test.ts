@@ -9,7 +9,8 @@ class FakeChannel {
   key: string
   constructor(public name: string, opts: any) { this.key = opts.config.presence.key; channels.push(this) }
   on(type: string, filter: any, cb: any) { this.handlers.push({ type, event: filter.event, cb }); return this }
-  subscribe(cb: (s: string) => void) { setTimeout(() => cb('SUBSCRIBED'), 0); return this }
+  statusCb: (s: string, e?: Error) => void = () => {}
+  subscribe(cb: (s: string, e?: Error) => void) { this.statusCb = cb; setTimeout(() => cb('SUBSCRIBED'), 0); return this }
   peers() { return channels.filter((c) => c.name === this.name) }
   async track(meta: any) {
     for (const c of this.peers()) c.presence[this.key] = [meta]
@@ -73,6 +74,27 @@ describe('onlinerum', () => {
     expect(guest.state.value?.phase).toBe('final')
     host.hostAgain(); await tick(1)
     expect(guest.state.value?.phase).toBe('lobby')
+    vi.useRealTimers()
+  })
+
+  it('visar återanslutning i stället för fel när en fungerande anslutning bryts', async () => {
+    vi.useFakeTimers()
+    const host = useRoom('9999', 'Värd', true)
+    host.connect(); await tick(1)
+    const guest = useRoom('9999', 'Gäst', false)
+    guest.connect(); await tick(1)
+    const guestCh = channels.filter((c) => c.name === 'arsgissaren-9999')[1]
+
+    guestCh.statusCb('CHANNEL_ERROR', new Error('transport failure'))
+    expect(guest.reconnecting.value).toBe(true)
+    expect(guest.error.value).toBe('') // ingen röd felruta
+
+    host.hostSettings(20, false, 30); await tick(1) // gästen missar inget viktigt, men får läget vid återanslutning
+    guestCh.statusCb('SUBSCRIBED'); await tick(1)
+    expect(guest.reconnecting.value).toBe(false)
+    expect(guest.state.value?.total).toBe(20)
+    await tick(6000)
+    expect(guest.error.value).toBe('')
     vi.useRealTimers()
   })
 })
