@@ -183,4 +183,47 @@ describe('onlinerum', () => {
     expect(guest.state.value?.phase).toBe('reveal') // ~5,7 s in, inte efter 20 s
     vi.useRealTimers()
   })
+
+  it('släpper in den som kommer in mitt i matchen (t.ex. tappade nätet när värden startade)', async () => {
+    vi.useFakeTimers()
+    const host = useRoom('2222', 'Värd', true)
+    host.connect(); await tick(1)
+    host.hostStart(); await tick(1)
+    expect(host.state.value?.phase).toBe('listen')
+    expect(host.state.value?.players).toHaveLength(1)
+
+    const late = useRoom('2222', 'Sen', false)
+    late.connect(); await tick(1)
+    const players = late.state.value?.players.map((p) => p.name)
+    expect(players).toEqual(['Värd', 'Sen']) // med direkt, inte åskådare
+    expect(late.state.value?.totals[late.me.id]).toBe(0)
+    // och får samma starttid för låten som alla andra
+    expect(Math.abs(late.startAt.value - host.startAt.value)).toBeLessThan(50)
+    late.guess(1990); await tick(1)
+    await tick(40000)
+    expect(host.state.value?.reveal?.guesses[late.me.id]).toBe(1990)
+    vi.useRealTimers()
+  })
+
+  it('samma telefon får tillbaka sin plats och sina poäng efter omladdning', async () => {
+    const mem = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) })
+    vi.useFakeTimers()
+    const host = useRoom('1111', 'Värd', true)
+    host.connect(); await tick(1)
+    const first = useRoom('1111', 'Sara', false)
+    first.connect(); await tick(1)
+    host.hostStart(); await tick(1)
+    const totalsBefore = { ...host.state.value!.totals, [first.me.id]: 42 }
+    host.state.value = { ...host.state.value!, totals: totalsBefore }
+
+    first.leave() // laddar om sidan …
+    const again = useRoom('1111', 'Sara', false)
+    expect(again.me.id).toBe(first.me.id) // … och är samma spelare
+    again.connect(); await tick(1)
+    expect(again.state.value?.players.filter((p) => p.name === 'Sara')).toHaveLength(1)
+    expect(again.state.value?.totals[again.me.id]).toBe(42)
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
 })

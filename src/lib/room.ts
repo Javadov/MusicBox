@@ -66,6 +66,23 @@ export const CODE_LENGTH = 4
 export const makeCode = () =>
   Array.from({ length: CODE_LENGTH }, () => Math.floor(Math.random() * 10)).join('')
 const uid = () => Math.random().toString(36).slice(2, 10)
+
+/**
+ * Samma telefon får samma spelar-id i ett rum, även efter omladdning eller om man går med igen.
+ * Då känner värden igen spelaren och den får tillbaka sin plats och sina poäng.
+ */
+const PLAYER_KEY = 'ag-player'
+function playerId(code: string): string {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PLAYER_KEY) ?? 'null') as { code?: string; id?: string } | null
+    if (saved?.code === code && saved.id) return saved.id
+    const id = uid()
+    localStorage.setItem(PLAYER_KEY, JSON.stringify({ code, id }))
+    return id
+  } catch {
+    return uid() // ingen lagring (privat läge, tester)
+  }
+}
 const START_DELAY = 3000
 /** paus mellan att alla tryckt Klar! och avslöjandet */
 const ALL_IN_PAUSE = 600
@@ -80,7 +97,7 @@ export function guessWindow(s: { guessSeconds: number; guessDuring?: boolean; cl
 }
 
 export function useRoom(code: string, name: string, isHost: boolean) {
-  const me: Player = { id: uid(), name }
+  const me: Player = { id: playerId(code), name }
   const state = ref<RoomState | null>(null)
   const present = ref<(Player & { host: boolean })[]>([])
   const connected = ref(false)
@@ -135,6 +152,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
         host: !!metas[0]?.host,
       }))
       if (isHost && state.value?.phase === 'lobby') hostLobby()
+      else if (isHost) hostAdmit()
     })
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (!isHost) apply(payload as RoomState)
@@ -252,6 +270,25 @@ export function useRoom(code: string, name: string, isHost: boolean) {
         players: [],
       }
     )
+  }
+
+  /**
+   * Under en match: släpp in alla som är anslutna men inte med i matchen –
+   * t.ex. den som tappade anslutningen precis när värden tryckte Starta, eller kom sent.
+   * Nya spelare börjar på 0 p; den som kommer tillbaka behåller sina poäng.
+   */
+  function hostAdmit() {
+    const s = state.value
+    if (!s || s.phase === 'lobby') return
+    const known = new Set(s.players.map((p) => p.id))
+    const newcomers = present.value.filter((p) => !known.has(p.id)).map(({ id, name }) => ({ id, name }))
+    if (!newcomers.length) return
+    apply({
+      ...s,
+      players: [...s.players, ...newcomers],
+      totals: { ...s.totals, ...Object.fromEntries(newcomers.map((p) => [p.id, s.totals[p.id] ?? 0])) },
+    })
+    sendSnapshot() // med rätt starttid för låten som spelas just nu
   }
 
   function hostLobby() {
