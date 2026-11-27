@@ -164,4 +164,23 @@ describe('onlinerum', () => {
     expect(host.state.value?.phase).toBe('reveal')
     vi.useRealTimers()
   })
+
+  it('avslöjar direkt när alla tryckt Klar! – låten behöver inte spela klart', async () => {
+    vi.useFakeTimers()
+    const host = useRoom('3333', 'Värd', true)
+    host.connect(); await tick(1)
+    const guest = useRoom('3333', 'Gäst', false)
+    guest.connect(); await tick(1)
+    host.hostSettings({ total: 10, audioAll: true, guessSeconds: 20, guessDuring: true, clipSeconds: 20 })
+    await tick(1)
+    host.hostStart(); await tick(1)
+    await tick(3000 + 4000) // 4 s in i en 20 s lång låt
+    host.guess(1999)
+    await tick(1000)
+    expect(guest.state.value?.phase).toBe('listen') // väntar på gästen
+    guest.guess(2001)
+    await tick(700)
+    expect(guest.state.value?.phase).toBe('reveal') // ~5,7 s in, inte efter 20 s
+    vi.useRealTimers()
+  })
 })

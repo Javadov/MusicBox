@@ -67,6 +67,8 @@ export const makeCode = () =>
   Array.from({ length: CODE_LENGTH }, () => Math.floor(Math.random() * 10)).join('')
 const uid = () => Math.random().toString(36).slice(2, 10)
 const START_DELAY = 3000
+/** paus mellan att alla tryckt Klar! och avslöjandet */
+const ALL_IN_PAUSE = 600
 
 /** Låtens speltid i sekunder (äldre rum utan inställningen spelar 10 s). */
 export const clipLength = (s: { clipSeconds?: number }) => s.clipSeconds ?? CLIP_SECONDS
@@ -321,8 +323,10 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     const allIn = s.players.every((p) => p.id in guesses)
     if (allIn) {
       clearTimeout(revealTimer)
-      // vänta tills klippet spelat klart innan vi avslöjar
-      const wait = Math.max(0, hostStartAt + clipLength(s) * 1000 - Date.now())
+      // Alla har tryckt Klar! – avslöja direkt (låten stoppas), ingen anledning att lyssna klart.
+      // Aldrig innan gissningen öppnat, och en kort paus så att den sista ser att det låstes.
+      const opensAt = hostStartAt + guessWindow(s).opens * 1000
+      const wait = Math.max(0, opensAt - Date.now()) + ALL_IN_PAUSE
       revealTimer = setTimeout(hostReveal, wait)
     }
   }
