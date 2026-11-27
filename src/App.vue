@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRegisterSW } from 'virtual:pwa-register/vue'
+import { detectLocale, t } from './i18n'
 import Home from './views/Home.vue'
 import LocalGame from './views/LocalGame.vue'
 import OnlineGame from './views/OnlineGame.vue'
 
 type View = 'home' | 'local' | 'host' | 'join'
+
+// Språk utifrån landet besökaren är i (om spelaren inte själv valt språk)
+detectLocale()
 const view = ref<View>('home')
 
 // ---------- Nya versioner ----------
@@ -38,8 +42,8 @@ watch(
   <OnlineGame v-else :key="view" :mode="view" @exit="view = 'home'" />
 
   <div v-if="needRefresh && view !== 'home'" class="update" role="status">
-    <span>Ny version finns</span>
-    <button class="update-btn" @click="updateServiceWorker(true)">Uppdatera</button>
+    <span>{{ t('update.available') }}</span>
+    <button class="update-btn" @click="updateServiceWorker(true)">{{ t('update.button') }}</button>
   </div>
 </template>
 

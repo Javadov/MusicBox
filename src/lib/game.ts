@@ -1,4 +1,5 @@
 import type { Song } from './songs'
+import type { MessageKey } from '../i18n'
 
 /**
  * Poäng: mest poäng vinner.
@@ -75,11 +76,12 @@ export function rank(players: { id: string; name: string }[], totals: Record<str
   })
 }
 
-export function verdict(diff: number | null): string {
-  if (diff == null) return 'Missade'
-  if (diff === 0) return 'Exakt rätt!'
-  if (diff <= 2) return 'Supernära'
-  if (diff <= 5) return 'Nära'
-  if (diff < 10) return 'Sådär' // 10+ år fel ger 0 p
-  return 'Långt bort'
+/** Bedömning av en gissning, som översättningsnyckel (visa med t()). */
+export function verdict(diff: number | null): MessageKey {
+  if (diff == null) return 'verdict.missed'
+  if (diff === 0) return 'verdict.exact'
+  if (diff <= 2) return 'verdict.superClose'
+  if (diff <= 5) return 'verdict.close'
+  if (diff < 10) return 'verdict.ok' // 10+ år fel ger 0 p
+  return 'verdict.far'
 }

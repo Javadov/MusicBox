@@ -17,18 +17,18 @@ export type ListId = 'international' | 'english' | 'svenska' | 'turkce' | 'azerb
 
 export interface SongList {
   id: ListId
-  label: string
+  /** namnet visas med t(`list.${id}`) */
   flag: string
   /** iTunes-butiker att söka i, i tur och ordning */
   countries: string[]
 }
 
 export const LISTS: SongList[] = [
-  { id: 'international', label: 'Internationell', flag: '🌍', countries: ['SE', 'US'] },
-  { id: 'english', label: 'Engelska', flag: '🇬🇧', countries: ['SE', 'US'] },
-  { id: 'svenska', label: 'Svenska', flag: '🇸🇪', countries: ['SE', 'US'] },
-  { id: 'turkce', label: 'Türkçe', flag: '🇹🇷', countries: ['TR', 'SE', 'US'] },
-  { id: 'azerbaycanca', label: 'Azərbaycanca', flag: '🇦🇿', countries: ['AZ', 'TR', 'SE', 'US'] },
+  { id: 'international', flag: '🌍', countries: ['SE', 'US'] },
+  { id: 'english', flag: '🇬🇧', countries: ['SE', 'US'] },
+  { id: 'svenska', flag: '🇸🇪', countries: ['SE', 'US'] },
+  { id: 'turkce', flag: '🇹🇷', countries: ['TR', 'SE', 'US'] },
+  { id: 'azerbaycanca', flag: '🇦🇿', countries: ['AZ', 'TR', 'SE', 'US'] },
 ]
 export const DEFAULT_LIST: ListId = 'international'
 

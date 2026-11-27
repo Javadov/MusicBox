@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { LISTS, type ListId } from '../lib/songs'
+import { listName, t } from '../i18n'
 
 // Vanlig <select>: iOS visar sin egen hjulväljare, datorn en lista – skalar till hur många språk som helst.
 const model = defineModel<ListId>({ required: true })
@@ -7,8 +8,8 @@ const model = defineModel<ListId>({ required: true })
 
 <template>
   <div class="ls">
-    <select id="song-list" v-model="model" aria-label="Låtlista">
-      <option v-for="l in LISTS" :key="l.id" :value="l.id">{{ l.flag }}  {{ l.label }}</option>
+    <select id="song-list" v-model="model" :aria-label="t('common.songList')">
+      <option v-for="l in LISTS" :key="l.id" :value="l.id">{{ l.flag }}  {{ listName(l.id) }}</option>
     </select>
     <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
   </div>

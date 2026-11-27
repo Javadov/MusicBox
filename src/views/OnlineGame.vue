@@ -7,6 +7,7 @@ import { CLIP_SECONDS, playClip, stopClip, unlockAudio } from '../lib/audio'
 import { verdict, yearDiff } from '../lib/game'
 import { CODE_LENGTH, clipLength, guessWindow, makeCode, useRoom } from '../lib/room'
 import ListSelect from '../components/ListSelect.vue'
+import { listName, t } from '../i18n'
 import { DEFAULT_LIST, getList, type ListId } from '../lib/songs'
 import { useNow } from '../lib/useNow'
 
@@ -113,7 +114,9 @@ const guessOpen = computed(() => elapsed.value >= win.value.opens * 1000)
 const guessLeft = computed(() => Math.max(0, Math.ceil(win.value.closes - elapsed.value / 1000)))
 const canLock = computed(() => touched.value && guessOpen.value && guessLeft.value > 0)
 const lockLabel = computed(() =>
-  !guessOpen.value ? (s.value?.guessDuring ? 'Vänta på låten…' : 'Gissa när låten är slut') : !touched.value ? 'Dra för att välja år' : 'Klar!',
+  !guessOpen.value
+    ? t(s.value?.guessDuring ? 'online.waitSong' : 'online.guessAfterSong')
+    : t(touched.value ? 'common.done' : 'common.dragToPick'),
 )
 const locked = computed(() => room.value?.myGuess.value?.roundId === s.value?.roundId)
 const hearsAudio = computed(() => !!s.value && (s.value.audioAll || isHost))
@@ -147,33 +150,33 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="topbar">
-    <button class="back" @click="$emit('exit')">← Lämna</button>
-    <span v-if="s && s.round" class="muted small">Låt {{ s.round }} av {{ s.total }}</span>
-    <span v-else-if="room" class="muted small">Rum {{ code }}</span>
+    <button class="back" @click="$emit('exit')">{{ t('common.leave') }}</button>
+    <span v-if="s && s.round" class="muted small">{{ t('common.songOf', { n: s.round, total: s.total }) }}</span>
+    <span v-else-if="room" class="muted small">{{ t('online.room', { code }) }}</span>
   </div>
 
   <!-- ANSLUT -->
   <template v-if="!room">
-    <h2>{{ isHost ? 'Skapa rum' : 'Gå med i rum' }}</h2>
+    <h2>{{ t(isHost ? 'home.host' : 'home.join') }}</h2>
     <form class="card stack" @submit.prevent="enter">
-      <label class="field">Ditt namn
-        <input id="name" v-model="name" type="text" maxlength="16" autocomplete="nickname" placeholder="T.ex. Elvin" />
+      <label class="field">{{ t('online.yourName') }}
+        <input id="name" v-model="name" type="text" maxlength="16" autocomplete="nickname" :placeholder="t('online.namePlaceholder')" />
       </label>
-      <label v-if="!isHost" class="field">Rumskod
+      <label v-if="!isHost" class="field">{{ t('online.roomCode') }}
         <input id="code" v-model="code" type="text" class="code" :maxlength="CODE_LENGTH" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="1234" @input="code = code.replace(/\D/g, '')" />
       </label>
       <button id="enter" class="btn" :class="{ pink: isHost }" :disabled="!name.trim() || !codeOk">
-        {{ isHost ? 'Skapa' : 'Gå med' }}
+        {{ t(isHost ? 'online.create' : 'online.join') }}
       </button>
     </form>
   </template>
 
-  <p v-else-if="room.error.value" class="error">{{ room.error.value }}</p>
-  <p v-else-if="!room.connected.value || !s" class="center muted">Ansluter till rummet…</p>
+  <p v-else-if="room.error.value" class="error">{{ t(room.error.value.key, room.error.value.params) }}</p>
+  <p v-else-if="!room.connected.value || !s" class="center muted">{{ t('online.connecting') }}</p>
 
   <Transition name="toast">
     <div v-if="room?.reconnecting.value && !room.error.value" class="toast" role="status">
-      <span class="dot" aria-hidden="true" /> Anslutningen bröts – återansluter…
+      <span class="dot" aria-hidden="true" /> {{ t('online.reconnecting') }}
     </div>
   </Transition>
 
@@ -181,60 +184,56 @@ onBeforeUnmount(() => {
     <!-- LOBBY -->
     <template v-if="s.phase === 'lobby'">
       <section class="card center stack">
-        <p class="muted">Rumskod</p>
-        <button class="roomcode" @click="copyCode" aria-label="Kopiera rumskod">{{ code }}</button>
-        <p class="muted small">Alla öppnar appen, väljer ”Gå med i rum” och skriver koden.</p>
-        <p v-if="!isHost" class="small">Låtlista: <strong>{{ getList(s.list).flag }} {{ getList(s.list).label }}</strong></p>
+        <p class="muted">{{ t('online.roomCode') }}</p>
+        <button class="roomcode" @click="copyCode" :aria-label="t('online.copyCode')">{{ code }}</button>
+        <p class="muted small">{{ t('online.shareHint', { join: t('home.join') }) }}</p>
+        <p v-if="!isHost" class="small">{{ t('online.listIs') }} <strong>{{ getList(s.list).flag }} {{ listName(getList(s.list).id) }}</strong></p>
       </section>
       <section class="card stack">
-        <h3>Spelare ({{ room.present.value.length }})</h3>
+        <h3>{{ t('online.players', { n: room.present.value.length }) }}</h3>
         <ul class="list">
           <li v-for="p in room.present.value" :key="p.id">
             <strong>{{ p.name }}</strong>
-            <span v-if="p.host" class="tag gold">värd</span>
-            <span v-if="p.id === me?.id" class="tag mint">du</span>
+            <span v-if="p.host" class="tag gold">{{ t('online.host') }}</span>
+            <span v-if="p.id === me?.id" class="tag mint">{{ t('common.you') }}</span>
           </li>
         </ul>
       </section>
       <template v-if="isHost">
         <section class="card stack">
-          <h3>Låtlista</h3>
+          <h3>{{ t('common.songList') }}</h3>
           <ListSelect v-model="list" />
-          <div class="row"><h3 class="grow">Antal låtar</h3><span class="big">{{ count }}</span></div>
-          <input id="count" v-model.number="count" type="range" min="10" max="100" step="5" class="plain" aria-label="Antal låtar" />
-          <h3>Ljud</h3>
+          <div class="row"><h3 class="grow">{{ t('common.songCount') }}</h3><span class="big">{{ count }}</span></div>
+          <input id="count" v-model.number="count" type="range" min="10" max="100" step="5" class="plain" :aria-label="t('common.songCount')" />
+          <h3>{{ t('online.audio') }}</h3>
           <div class="row">
-            <button class="chip" :class="{ on: audioAll }" @click="audioAll = true">Alla mobiler</button>
-            <button class="chip" :class="{ on: !audioAll }" @click="audioAll = false">Bara min (högtalare)</button>
+            <button class="chip" :class="{ on: audioAll }" @click="audioAll = true">{{ t('online.audioAll') }}</button>
+            <button class="chip" :class="{ on: !audioAll }" @click="audioAll = false">{{ t('online.audioHost') }}</button>
           </div>
-          <h3>Låtens speltid</h3>
+          <h3>{{ t('online.clipLength') }}</h3>
           <div class="row">
-            <button v-for="n in [10, 20, 30]" :key="n" class="chip" :class="{ on: clipSeconds === n }" @click="setClip(n)">{{ n }} s</button>
+            <button v-for="n in [10, 20, 30]" :key="n" class="chip" :class="{ on: clipSeconds === n }" @click="setClip(n)">{{ t('common.seconds', { n }) }}</button>
           </div>
-          <h3>När gissar man?</h3>
+          <h3>{{ t('online.whenGuess') }}</h3>
           <div class="row">
-            <button class="chip" :class="{ on: !guessDuring }" @click="setDuring(false)">Efter låten</button>
-            <button class="chip" :class="{ on: guessDuring }" @click="setDuring(true)">Direkt när den börjar</button>
+            <button class="chip" :class="{ on: !guessDuring }" @click="setDuring(false)">{{ t('online.after') }}</button>
+            <button class="chip" :class="{ on: guessDuring }" @click="setDuring(true)">{{ t('online.during') }}</button>
           </div>
-          <p class="muted small">
-            {{ guessDuring
-              ? 'Man kan gissa så fort låten startar. Tiden och snabbhetsbonusen räknas från låtstart, och gissningstiden räcker alltid hela låten.'
-              : 'Man lyssnar klart först. Tiden och snabbhetsbonusen räknas från att låten är slut.' }}
-          </p>
-          <h3>{{ guessDuring ? 'Tid att gissa från låtstart' : 'Tid att gissa efter låten' }}</h3>
+          <p class="muted small">{{ t(guessDuring ? 'online.duringHelp' : 'online.afterHelp') }}</p>
+          <h3>{{ t(guessDuring ? 'online.guessTimeDuring' : 'online.guessTimeAfter') }}</h3>
           <div class="row">
-            <button v-for="n in [10, 20, 30]" :key="n" class="chip" :class="{ on: guessSeconds === n }" @click="setGuess(n)">{{ n }} s</button>
+            <button v-for="n in [10, 20, 30]" :key="n" class="chip" :class="{ on: guessSeconds === n }" @click="setGuess(n)">{{ t('common.seconds', { n }) }}</button>
           </div>
         </section>
-        <button id="start-online" class="btn" :disabled="room.present.value.length < 1" @click="room.hostStart()">Starta spelet</button>
+        <button id="start-online" class="btn" :disabled="room.present.value.length < 1" @click="room.hostStart()">{{ t('online.startGame') }}</button>
       </template>
-      <p v-else class="center muted">Väntar på att värden startar…</p>
+      <p v-else class="center muted">{{ t('online.waitingStart') }}</p>
     </template>
 
     <!-- LADDAR -->
     <template v-else-if="s.phase === 'loading'">
       <Vinyl :progress="0" />
-      <p class="center muted">Värden letar fram nästa skiva…</p>
+      <p class="center muted">{{ t('online.hostLoading') }}</p>
     </template>
 
     <!-- LYSSNA + GISSA -->
@@ -245,22 +244,22 @@ onBeforeUnmount(() => {
         :label="countdown > 0 ? String(countdown) : ''"
       />
       <div class="center">
-        <button v-if="blocked" class="btn pink" @click="startAudio">Tryck för att spela</button>
-        <p v-else-if="countdown > 0" class="muted">Låten startar om {{ countdown }}…</p>
+        <button v-if="blocked" class="btn pink" @click="startAudio">{{ t('common.tapToPlay') }}</button>
+        <p v-else-if="countdown > 0" class="muted">{{ t('online.startsIn', { n: countdown }) }}</p>
         <p v-else-if="guessOpen" class="muted">
-          {{ progress < 1 ? (hearsAudio ? 'Lyssna och gissa!' : 'Lyssna på högtalaren och gissa!') + ' ' : '' }}{{ guessLeft }} s kvar att gissa
+          {{ progress < 1 ? t(hearsAudio ? 'online.listenGuess' : 'online.listenSpeakerGuess') + ' ' : '' }}{{ t('online.secondsLeft', { n: guessLeft }) }}
         </p>
-        <p v-else class="muted">{{ hearsAudio ? 'Lyssna!' : 'Lyssna på högtalaren!' }}</p>
+        <p v-else class="muted">{{ t(hearsAudio ? 'online.listen' : 'online.listenSpeaker') }}</p>
       </div>
       <section v-if="inGame && !locked" class="card stack">
         <YearSlider v-model="year" @interact="touched = true" />
         <button id="lock" class="btn" :disabled="!canLock" @click="lock">{{ lockLabel }}</button>
       </section>
       <section v-else-if="inGame" class="card center stack">
-        <p>Du gissade <strong>{{ room.myGuess.value?.year }}</strong></p>
-        <p class="muted small">Väntar på de andra…</p>
+        <p>{{ t('online.youGuessed') }} <strong>{{ room.myGuess.value?.year }}</strong></p>
+        <p class="muted small">{{ t('online.waitingOthers') }}</p>
       </section>
-      <p v-else class="center muted">Du tittar på den här omgången.</p>
+      <p v-else class="center muted">{{ t('online.spectating') }}</p>
     </template>
 
     <!-- AVSLÖJANDE -->
@@ -274,26 +273,26 @@ onBeforeUnmount(() => {
       <ul class="list">
         <li v-for="r in revealRows" :key="r.id">
           <strong>{{ r.name }}</strong>
-          <span class="muted">{{ r.g ?? 'ingen gissning' }}<small v-if="r.auto" title="Tryckte inte Klar! – året på hjulet räknades, utan snabbhetsbonus"> · ej klar</small></span>
-          <span class="tag" :class="{ gold: r.diff != null && r.diff <= 2 }">{{ verdict(r.diff) }}</span>
-          <span class="pts">+{{ r.pts }}<small v-if="r.bonus" class="muted" title="Snabbhetsbonus"> ⚡{{ r.bonus }}</small></span>
+          <span class="muted">{{ r.g ?? t('online.noGuess') }}<small v-if="r.auto" :title="t('online.notDoneTitle')"> · {{ t('online.notDone') }}</small></span>
+          <span class="tag" :class="{ gold: r.diff != null && r.diff <= 2 }">{{ t(verdict(r.diff)) }}</span>
+          <span class="pts">+{{ r.pts }}<small v-if="r.bonus" class="muted" :title="t('online.speedBonus')"> ⚡{{ r.bonus }}</small></span>
         </li>
       </ul>
-      <h3>Ställning</h3>
+      <h3>{{ t('common.standings') }}</h3>
       <Standings :players="s.players" :totals="s.totals" :me-id="me?.id" />
       <button v-if="isHost" id="next" class="btn" @click="s.round >= s.total ? room.hostFinal() : room.hostNext()">
-        {{ s.round >= s.total ? 'Visa slutresultat' : 'Nästa låt' }}
+        {{ t(s.round >= s.total ? 'common.showFinal' : 'common.nextSong') }}
       </button>
-      <p v-else class="center muted">Väntar på värden…</p>
+      <p v-else class="center muted">{{ t('online.waitingHost') }}</p>
     </template>
 
     <!-- SLUT -->
     <template v-else-if="s.phase === 'final'">
-      <h2>Slutresultat</h2>
+      <h2>{{ t('common.finalResults') }}</h2>
       <Standings :players="s.players" :totals="s.totals" :me-id="me?.id" final />
-      <p class="muted small center">Flest poäng vinner. Upp till 100 p per låt för rätt år, plus upp till 50 p för att svara snabbt.</p>
-      <button v-if="isHost" class="btn" @click="room.hostAgain()">Ny omgång i samma rum</button>
-      <button class="btn ghost" @click="$emit('exit')">Till start</button>
+      <p class="muted small center">{{ t('online.finalNote') }}</p>
+      <button v-if="isHost" class="btn" @click="room.hostAgain()">{{ t('online.again') }}</button>
+      <button class="btn ghost" @click="$emit('exit')">{{ t('common.toStart') }}</button>
     </template>
   </template>
 </template>

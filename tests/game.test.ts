@@ -25,8 +25,8 @@ describe('poäng', () => {
   })
   it('bedömer gissningen efter år fel', () => {
     expect(yearDiff(2013, 2015)).toBe(2)
-    expect(verdict(0)).toBe('Exakt rätt!')
-    expect(verdict(null)).toBe('Missade')
+    expect(verdict(0)).toBe('verdict.exact')
+    expect(verdict(null)).toBe('verdict.missed')
   })
   it('rankar flest poäng först med delad plats', () => {
     const r = rank([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }], { a: 10, b: 30, c: 30 })

@@ -92,14 +92,14 @@ describe('onlinerum', () => {
 
     guestCh.statusCb('CHANNEL_ERROR', new Error('transport failure'))
     expect(guest.reconnecting.value).toBe(true)
-    expect(guest.error.value).toBe('') // ingen röd felruta
+    expect(guest.error.value).toBeNull() // ingen röd felruta
 
     host.hostSettings({ total: 20, audioAll: false, guessSeconds: 30 }); await tick(1) // gästen missar inget viktigt, men får läget vid återanslutning
     guestCh.statusCb('SUBSCRIBED'); await tick(1)
     expect(guest.reconnecting.value).toBe(false)
     expect(guest.state.value?.total).toBe(20)
     await tick(6000)
-    expect(guest.error.value).toBe('')
+    expect(guest.error.value).toBeNull()
     vi.useRealTimers()
   })
 

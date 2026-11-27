@@ -3,6 +3,7 @@ import { createClient, type RealtimeChannel, type SupabaseClient } from '@supaba
 import { drawSongs, points, speedBonus, speedFactor } from './game'
 import { correctedYear, findClip } from './itunes'
 import { CLIP_SECONDS } from './audio'
+import type { MessageKey } from '../i18n'
 import { DEFAULT_LIST, getList, loadSongs, type ListId, type Song } from './songs'
 
 // ---------- Supabase ----------
@@ -52,6 +53,12 @@ export interface RoomState {
   players: Player[]
 }
 
+/** Fel som visas för spelaren – översätts i vyn med t(key, params). */
+export interface AppError {
+  key: MessageKey
+  params?: Record<string, string | number>
+}
+
 /** Det värden kan ställa in i lobbyn. */
 export type RoomSettings = Pick<RoomState, 'total' | 'audioAll' | 'guessSeconds' | 'guessDuring' | 'clipSeconds' | 'list'>
 
@@ -77,7 +84,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
   const connected = ref(false)
   /** true när en tidigare fungerande anslutning tillfälligt har brutits (t.ex. appen låg i bakgrunden) */
   const reconnecting = ref(false)
-  const error = ref('')
+  const error = ref<AppError | null>(null)
   /** lokal Date.now()-tid då klippet startar */
   const startAt = ref(0)
   const myGuess = ref<{ roundId: string; year: number } | null>(null)
@@ -112,7 +119,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
 
   function connect() {
     if (!supabase) {
-      error.value = 'Supabase är inte konfigurerat (.env saknas).'
+      error.value = { key: 'err.noSupabase' }
       return
     }
     const ch = supabase.channel(`arsgissaren-${code}`, {
@@ -141,7 +148,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     })
     const connectTimer = setTimeout(() => {
       if (!connected.value && !error.value)
-        error.value = 'Får ingen kontakt med servern. Kolla nätverket eller stäng av annonsblockerare/VPN och försök igen.'
+        error.value = { key: 'err.noContact' }
     }, 10000)
     ch.subscribe(async (status, err) => {
       if (err) console.error('[realtime]', status, err)
@@ -150,7 +157,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
         const wasReconnect = connected.value
         connected.value = true
         reconnecting.value = false
-        error.value = ''
+        error.value = null
         await ch.track({ name: me.name, host: isHost })
         if (isHost) {
           hostLobby()
@@ -160,7 +167,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
         } else {
           ch.send({ type: 'broadcast', event: 'hello', payload: {} })
           setTimeout(() => {
-            if (!state.value) error.value = `Hittade inget rum med koden ${code}.`
+            if (!state.value) error.value = { key: 'err.noRoom', params: { code } }
           }, 5000)
         }
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -170,7 +177,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
           reconnecting.value = true
         } else {
           clearTimeout(connectTimer)
-          error.value = `Kunde inte ansluta till servern (${status}${err?.message ? ': ' + err.message : ''}).`
+          error.value = { key: 'err.connect', params: { status: status + (err?.message ? ': ' + err.message : '') } }
         }
       }
     })
@@ -263,7 +270,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     try {
       songs = drawSongs(await loadSongs(s.list ?? DEFAULT_LIST), s.total)
     } catch {
-      error.value = 'Kunde inte ladda låtlistan.'
+      error.value = { key: 'err.list' }
       return hostFinal()
     }
     songIdx = 0
@@ -283,7 +290,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
       if (clip) current = { ...current, y: correctedYear(current, clip), artwork: clip.artwork }
     }
     if (!clip || !current) {
-      error.value = 'Kunde inte hämta fler ljudklipp.'
+      error.value = { key: 'err.clips' }
       return hostFinal()
     }
     // förladda nästa i bakgrunden

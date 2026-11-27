@@ -7,6 +7,7 @@ import { CLIP_SECONDS, playClip, stopClip, unlockAudio } from '../lib/audio'
 import { drawSongs, points, verdict, yearDiff } from '../lib/game'
 import { correctedYear, findClip, type Clip } from '../lib/itunes'
 import ListSelect from '../components/ListSelect.vue'
+import { t, type MessageKey } from '../i18n'
 import { DEFAULT_LIST, getList, loadSongs, type ListId, type Song } from '../lib/songs'
 import { useNow } from '../lib/useNow'
 
@@ -15,7 +16,7 @@ type Phase = 'setup' | 'loading' | 'play' | 'reveal' | 'final'
 const MID = 1992
 
 const phase = ref<Phase>('setup')
-const players = ref([{ id: 'p1', name: 'Spelare 1' }])
+const players = ref([{ id: 'p1', name: t('local.playerN', { n: 1 }) }])
 const count = ref(10)
 const list = ref<ListId>(DEFAULT_LIST)
 const round = ref(0)
@@ -26,7 +27,7 @@ const year = ref(MID)
 /** Lås-knappen är inaktiv tills spelaren själv har rört årshjulet */
 const touched = ref(false)
 const blocked = ref(false)
-const error = ref('')
+const error = ref<MessageKey | null>(null)
 const now = useNow()
 
 let songs: Song[] = []
@@ -36,7 +37,7 @@ const startAt = ref(0)
 
 let nextId = 2
 function addPlayer() {
-  players.value.push({ id: 'p' + nextId, name: 'Spelare ' + nextId })
+  players.value.push({ id: 'p' + nextId, name: t('local.playerN', { n: nextId }) })
   nextId++
 }
 function removePlayer(i: number) {
@@ -52,13 +53,13 @@ const allGuessed = computed(() => turn.value >= players.value.length)
 
 async function start() {
   await unlockAudio()
-  players.value = players.value.map((p, i) => ({ ...p, name: p.name.trim() || `Spelare ${i + 1}` }))
+  players.value = players.value.map((p, i) => ({ ...p, name: p.name.trim() || t('local.playerN', { n: i + 1 }) }))
   totals.value = Object.fromEntries(players.value.map((p) => [p.id, 0]))
   phase.value = 'loading'
   try {
     songs = drawSongs(await loadSongs(list.value), count.value)
   } catch {
-    error.value = 'Kunde inte ladda låtlistan.'
+    error.value = 'err.list'
     return finish()
   }
   songIdx = 0
@@ -69,7 +70,7 @@ async function start() {
 async function next() {
   if (round.value >= count.value) return finish()
   phase.value = 'loading'
-  error.value = ''
+  error.value = null
   let clip: Clip | null = null
   let song: Song | undefined
   while (!clip && songIdx < songs.length) {
@@ -77,7 +78,7 @@ async function next() {
     clip = await findClip(song, getList(list.value).countries)
   }
   if (!clip || !song) {
-    error.value = 'Kunde inte hämta ljudklipp. Kolla internetanslutningen.'
+    error.value = 'local.errClips'
     return finish()
   }
   if (songs[songIdx]) findClip(songs[songIdx], getList(list.value).countries) // förladda nästa
@@ -124,56 +125,56 @@ onBeforeUnmount(stopClip)
 
 <template>
   <div class="topbar">
-    <button class="back" @click="$emit('exit')">← Avsluta</button>
-    <span v-if="round" class="muted small">Låt {{ round }} av {{ count }}</span>
+    <button class="back" @click="$emit('exit')">{{ t('common.exit') }}</button>
+    <span v-if="round" class="muted small">{{ t('common.songOf', { n: round, total: count }) }}</span>
   </div>
 
   <!-- INSTÄLLNINGAR -->
   <template v-if="phase === 'setup'">
-    <h2>En mobil</h2>
-    <p class="muted">Spela låten i en högtalare. Skicka runt mobilen så att alla gissar i tur och ordning.</p>
+    <h2>{{ t('local.title') }}</h2>
+    <p class="muted">{{ t('local.intro') }}</p>
     <section class="card stack">
-      <h3>Spelare</h3>
+      <h3>{{ t('local.players') }}</h3>
       <div v-for="(p, i) in players" :key="p.id" class="row">
-        <input :id="'name-' + p.id" v-model="p.name" type="text" class="grow" maxlength="16" :aria-label="'Namn spelare ' + (i + 1)" />
-        <button class="btn ghost small" :disabled="players.length === 1" @click="removePlayer(i)" aria-label="Ta bort">✕</button>
+        <input :id="'name-' + p.id" v-model="p.name" type="text" class="grow" maxlength="16" :aria-label="t('local.playerNameAria', { n: i + 1 })" />
+        <button class="btn ghost small" :disabled="players.length === 1" @click="removePlayer(i)" :aria-label="t('local.remove')">✕</button>
       </div>
-      <button class="btn ghost small" :disabled="players.length >= 10" @click="addPlayer">+ Lägg till spelare</button>
+      <button class="btn ghost small" :disabled="players.length >= 10" @click="addPlayer">{{ t('local.addPlayer') }}</button>
     </section>
     <section class="card stack">
-      <h3>Låtlista</h3>
+      <h3>{{ t('common.songList') }}</h3>
       <ListSelect v-model="list" />
-      <div class="row"><h3 class="grow">Antal låtar</h3><span class="big">{{ count }}</span></div>
-      <input id="count" v-model.number="count" type="range" min="10" max="100" step="5" class="plain" aria-label="Antal låtar" />
+      <div class="row"><h3 class="grow">{{ t('common.songCount') }}</h3><span class="big">{{ count }}</span></div>
+      <input id="count" v-model.number="count" type="range" min="10" max="100" step="5" class="plain" :aria-label="t('common.songCount')" />
       <div class="row">
         <button v-for="n in [10, 20, 30, 50, 100]" :key="n" class="chip" :class="{ on: count === n }" @click="count = n">{{ n }}</button>
       </div>
     </section>
-    <button id="start-local" class="btn" @click="start">Starta</button>
+    <button id="start-local" class="btn" @click="start">{{ t('local.start') }}</button>
   </template>
 
   <!-- LADDAR -->
   <template v-else-if="phase === 'loading'">
     <Vinyl :progress="0" />
-    <p class="center muted">Letar fram nästa skiva…</p>
+    <p class="center muted">{{ t('common.loadingNext') }}</p>
   </template>
 
   <!-- SPELA + GISSA -->
   <template v-else-if="phase === 'play' && current">
     <Vinyl :playing="clipPlaying" :progress="progress" />
     <div class="center">
-      <button v-if="blocked" class="btn pink" @click="play">Tryck för att spela</button>
-      <p v-else-if="progress < 1" class="muted">Lyssna… {{ Math.max(0, Math.ceil(CLIP_SECONDS - progress * CLIP_SECONDS)) }} s</p>
-      <p v-else class="muted">Låten är slut</p>
+      <button v-if="blocked" class="btn pink" @click="play">{{ t('common.tapToPlay') }}</button>
+      <p v-else-if="progress < 1" class="muted">{{ t('local.listening', { s: Math.max(0, Math.ceil(CLIP_SECONDS - progress * CLIP_SECONDS)) }) }}</p>
+      <p v-else class="muted">{{ t('local.songOver') }}</p>
     </div>
     <section v-if="!allGuessed" class="card stack">
-      <p class="center"><strong>{{ guesser!.name }}</strong> <span class="muted">gissar</span></p>
+      <p class="center"><strong>{{ guesser!.name }}</strong> <span class="muted">{{ t('local.isGuessing') }}</span></p>
       <YearSlider :key="guesser!.id" v-model="year" @interact="touched = true" />
-      <button id="lock" class="btn" :disabled="!touched" @click="lock">{{ touched ? 'Klar!' : 'Dra för att välja år' }}</button>
+      <button id="lock" class="btn" :disabled="!touched" @click="lock">{{ t(touched ? 'common.done' : 'common.dragToPick') }}</button>
     </section>
     <section v-else class="card stack center">
-      <p>Alla har gissat.</p>
-      <button id="reveal" class="btn pink" @click="reveal">Visa svaret</button>
+      <p>{{ t('local.allGuessed') }}</p>
+      <button id="reveal" class="btn pink" @click="reveal">{{ t('local.showAnswer') }}</button>
     </section>
   </template>
 
@@ -189,29 +190,29 @@ onBeforeUnmount(stopClip)
       <li v-for="p in players" :key="p.id">
         <strong>{{ p.name }}</strong>
         <span class="muted">{{ guesses[p.id] }}</span>
-        <span class="tag" :class="{ gold: (yearDiff(guesses[p.id], current.y) ?? 99) <= 2 }">{{ verdict(yearDiff(guesses[p.id], current.y)) }}</span>
+        <span class="tag" :class="{ gold: (yearDiff(guesses[p.id], current.y) ?? 99) <= 2 }">{{ t(verdict(yearDiff(guesses[p.id], current.y))) }}</span>
         <span class="pts">+{{ points(guesses[p.id], current.y) }}</span>
       </li>
     </ul>
     <template v-if="players.length > 1">
-      <h3>Ställning</h3>
+      <h3>{{ t('common.standings') }}</h3>
       <Standings :players="players" :totals="totals" />
     </template>
-    <p v-else class="center muted">Totalt: {{ totals[players[0].id] }} poäng</p>
+    <p v-else class="center muted">{{ t('local.total', { n: totals[players[0].id] }) }}</p>
     <button id="next" class="btn" @click="round >= count ? finish() : next()">
-      {{ round >= count ? 'Visa slutresultat' : 'Nästa låt' }}
+      {{ t(round >= count ? 'common.showFinal' : 'common.nextSong') }}
     </button>
   </template>
 
   <!-- SLUT -->
   <template v-else-if="phase === 'final'">
-    <h2>Slutresultat</h2>
-    <p v-if="error" class="error">{{ error }}</p>
+    <h2>{{ t('common.finalResults') }}</h2>
+    <p v-if="error" class="error">{{ t(error) }}</p>
     <Standings :players="players" :totals="totals" final />
-    <p class="muted small center">Flest poäng vinner. Bästa snitt: {{ round ? Math.round(Math.max(...Object.values(totals)) / round) : 0 }} av 100 p per låt.</p>
+    <p class="muted small center">{{ t('local.finalNote', { n: round ? Math.round(Math.max(...Object.values(totals)) / round) : 0 }) }}</p>
     <div class="stack">
-      <button class="btn" @click="start">Spela igen</button>
-      <button class="btn ghost" @click="$emit('exit')">Till start</button>
+      <button class="btn" @click="start">{{ t('local.playAgain') }}</button>
+      <button class="btn ghost" @click="$emit('exit')">{{ t('common.toStart') }}</button>
     </div>
   </template>
 </template>

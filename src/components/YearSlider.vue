@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { MIN_YEAR, MAX_YEAR } from '../lib/songs'
+import { t } from '../i18n'
 
 const model = defineModel<number>({ required: true })
 const props = defineProps<{ disabled?: boolean }>()
@@ -156,7 +157,7 @@ const centerYear = computed(() => MIN_YEAR + Math.round(pos.value))
         class="wheel"
         role="slider"
         tabindex="0"
-        aria-label="Välj år"
+        :aria-label="t('slider.aria')"
         :aria-valuemin="MIN_YEAR"
         :aria-valuemax="MAX_YEAR"
         :aria-valuenow="model"
