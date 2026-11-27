@@ -5,12 +5,19 @@ import { detectLocale, t } from './i18n'
 import Home from './views/Home.vue'
 import LocalGame from './views/LocalGame.vue'
 import OnlineGame from './views/OnlineGame.vue'
+import type { Session } from './lib/session'
 
 type View = 'home' | 'local' | 'host' | 'join'
 
 // Språk utifrån landet besökaren är i (om spelaren inte själv valt språk)
 detectLocale()
 const view = ref<View>('home')
+/** pågående spel att gå tillbaka till (från kortet på startsidan) */
+const resume = ref<Session | null>(null)
+function go(v: View, s: Session | null = null) {
+  resume.value = s
+  view.value = v
+}
 
 // ---------- Nya versioner ----------
 // Appen sparas i webbläsaren (PWA). Leta efter en ny version när appen öppnas,
@@ -37,9 +44,9 @@ watch(
 </script>
 
 <template>
-  <Home v-if="view === 'home'" @go="view = $event" />
-  <LocalGame v-else-if="view === 'local'" @exit="view = 'home'" />
-  <OnlineGame v-else :key="view" :mode="view" @exit="view = 'home'" />
+  <Home v-if="view === 'home'" @go="go($event)" @resume="go($event.host ? 'host' : 'join', $event)" />
+  <LocalGame v-else-if="view === 'local'" @exit="go('home')" />
+  <OnlineGame v-else :key="view" :mode="view" :resume="resume" @exit="go('home')" />
 
   <div v-if="needRefresh && view !== 'home'" class="update" role="status">
     <span>{{ t('update.available') }}</span>

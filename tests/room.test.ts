@@ -290,4 +290,47 @@ describe('onlinerum', () => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
+
+  it('värden kan fortsätta matchen efter att appen kraschat – gissningar och poäng finns kvar', async () => {
+    const mem = new Map<string, string>()
+    // bara värdens sparade match delas – i verkligheten är det två olika telefoner
+    const shared = (k: string) => k.startsWith('ag-host-')
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => (shared(k) ? mem.get(k) ?? null : null),
+      setItem: (k: string, v: string) => void (shared(k) && mem.set(k, v)),
+      removeItem: (k: string) => void mem.delete(k),
+    })
+    vi.useFakeTimers()
+    const host = useRoom('4321', 'Värd', true)
+    host.connect(); await tick(1)
+    const sara = useRoom('4321', 'Sara', false)
+    sara.connect(); await tick(1)
+    host.hostSettings({ guessDuring: true, guessSeconds: 30, clipSeconds: 30, total: 3 }); await tick(1)
+    host.hostStart(); await tick(1)
+    const roundId = host.state.value!.roundId
+    await tick(4000)
+
+    // värdens app kraschar: kanalen försvinner, inget mer händer på den telefonen
+    const hostCh = channels.find((c) => c.name === 'arsgissaren-4321' && c.key === host.me.id)!
+    channels.splice(channels.indexOf(hostCh), 1)
+    hostCh.handlers = []
+    sara.guess(1990); await tick(1) // gissningen skickas medan värden är borta – kommer inte fram
+    await tick(3000)
+
+    // värden öppnar appen igen och trycker "Gå tillbaka"
+    const back = useRoom('4321', 'Värd', true)
+    expect(back.resumed).toBe(true)
+    expect(back.me.id).toBe(host.me.id)
+    expect(back.state.value?.roundId).toBe(roundId) // samma låt pågår
+    expect(back.state.value?.total).toBe(3) // matchens inställningar, inte standard
+    back.connect(); await tick(1)
+    expect(sara.state.value?.roundId).toBe(roundId) // gästen fortsätter i samma låt
+    back.guess(2000); await tick(1000)
+    expect(back.state.value?.phase).toBe('reveal')
+    expect(back.state.value?.reveal?.guesses[sara.me.id]).toBe(1990) // Saras gissning kom fram igen
+    back.hostNext(); await tick(1)
+    expect(sara.state.value?.round).toBe(2) // matchen går vidare
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
 })

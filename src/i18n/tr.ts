@@ -10,6 +10,9 @@ const tr: Messages = {
   'home.join': 'Odaya katıl',
   'home.noOnline': 'Online mod için .env dosyasında Supabase anahtarları gerekli.',
   'home.footer': "1960'tan bugüne binlerce şarkı · {flags} · Ses klipleri iTunes'tan",
+  'home.activeGame': 'Devam eden bir oyunun var',
+  'home.rejoin': 'Geri dön',
+  'home.leaveGame': 'Ayrıl',
   'home.language': 'Dil',
 
   'common.exit': '← Çık',

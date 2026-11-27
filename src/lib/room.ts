@@ -4,6 +4,7 @@ import { drawSongs, points, speedBonus, speedFactor } from './game'
 import { correctedYear, findClip } from './itunes'
 import { CLIP_SECONDS } from './audio'
 import type { MessageKey } from '../i18n'
+import { hostSnapshotKey } from './session'
 import { DEFAULT_LIST, getList, loadSongs, type ListId, type Song } from './songs'
 
 // ---------- Supabase ----------
@@ -62,6 +63,21 @@ export interface AppError {
 /** Det värden kan ställa in i lobbyn. */
 export type RoomSettings = Pick<RoomState, 'total' | 'audioAll' | 'guessSeconds' | 'guessDuring' | 'clipSeconds' | 'list'>
 
+/** Allt värden behöver för att fortsätta en match efter att appen kraschat eller stängts. */
+interface HostSnapshot {
+  state: RoomState
+  songs: Song[]
+  songIdx: number
+  current: (Song & { artwork?: string }) | null
+  hostStartAt: number
+  guesses: Record<string, number | null>
+  guessTimes: Record<string, number>
+  drafts: Record<string, number>
+  members: [string, string][]
+  /** värdens eget spelar-id i matchen */
+  hostId: string
+}
+
 export const CODE_LENGTH = 4
 export const makeCode = () =>
   Array.from({ length: CODE_LENGTH }, () => Math.floor(Math.random() * 10)).join('')
@@ -115,7 +131,9 @@ export function guessWindow(s: { guessSeconds: number; guessDuring?: boolean; cl
 }
 
 export function useRoom(code: string, name: string, isHost: boolean) {
-  const me: Player = { id: playerId(code), name }
+  // Värden fortsätter en sparad match? Då är värden samma spelare som förut.
+  const snap = isHost ? storage.get<HostSnapshot>(hostSnapshotKey(code)) : null
+  const me: Player = { id: snap?.hostId ?? playerId(code), name }
   const state = ref<RoomState | null>(null)
   const present = ref<(Player & { host: boolean })[]>([])
   const connected = ref(false)
@@ -143,6 +161,54 @@ export function useRoom(code: string, name: string, isHost: boolean) {
   let revealTimer: ReturnType<typeof setTimeout> | undefined
 
   const onState = ref<((s: RoomState) => void) | null>(null)
+  /** senaste året på hjulet (för att skicka om om värden startar om) */
+  let lastDraft: { roundId: string; year: number } | null = null
+
+  // ---------- Värden fortsätter en sparad match ----------
+  if (snap?.state) {
+    songs = snap.songs
+    songIdx = snap.songIdx
+    current = snap.current
+    hostStartAt = snap.hostStartAt
+    guesses = snap.guesses
+    guessTimes = snap.guessTimes
+    drafts = snap.drafts
+    for (const [id, n] of snap.members) members.set(id, n)
+    state.value = snap.state
+    startAt.value = hostStartAt
+    const g = storage.get<{ code: string; roundId: string; year: number }>(GUESS_KEY)
+    if (g?.code === code && g.roundId === snap.state.roundId) myGuess.value = { roundId: g.roundId, year: g.year }
+  }
+  /** true om värden fortsätter en sparad match i stället för att börja om */
+  const resumed = !!snap?.state
+
+  function persist() {
+    if (!isHost || !state.value) return
+    const data: HostSnapshot = {
+      state: state.value, songs, songIdx, current, hostStartAt, guesses, guessTimes, drafts, members: [...members],
+      hostId: me.id,
+    }
+    storage.set(hostSnapshotKey(code), data)
+  }
+
+  /** Körs när värden är ansluten igen efter en omstart av appen. */
+  function resume() {
+    const s = state.value
+    if (!s) return hostLobby()
+    onState.value?.(s) // starta värdens eget ljud/visning
+    if (s.phase === 'loading') {
+      if (!songs.length) return hostAgain() // kraschade innan låtlistan hunnit laddas
+      return hostNext()
+    }
+    sendSnapshot()
+    // gissningar som skickades medan värden var borta kom aldrig fram – be om dem igen
+    channel.value?.send({ type: 'broadcast', event: 'resync', payload: { roundId: s.roundId } })
+    if (s.phase === 'listen') {
+      const closesAt = hostStartAt + guessWindow(s).closes * 1000
+      clearTimeout(revealTimer)
+      revealTimer = setTimeout(hostReveal, Math.max(0, closesAt - Date.now()))
+    }
+  }
 
   function apply(s: RoomState) {
     const newRound = s.phase === 'listen' && s.roundId !== state.value?.roundId
@@ -158,6 +224,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
 
   function send(s: RoomState) {
     apply(s)
+    persist()
     channel.value?.send({ type: 'broadcast', event: 'state', payload: s })
   }
 
@@ -194,6 +261,14 @@ export function useRoom(code: string, name: string, isHost: boolean) {
       // tryckte Lämna i lobbyn – ska inte räknas med när matchen startar
       if (isHost && state.value?.phase === 'lobby') members.delete(payload.id)
     })
+    ch.on('broadcast', { event: 'resync' }, ({ payload }) => {
+      // värden har startat om – skicka vår gissning (eller året på hjulet) igen
+      if (isHost) return
+      if (myGuess.value?.roundId === payload.roundId)
+        ch.send({ type: 'broadcast', event: 'guess', payload: { id: me.id, ...myGuess.value } })
+      else if (lastDraft?.roundId === payload.roundId)
+        ch.send({ type: 'broadcast', event: 'draft', payload: { id: me.id, ...lastDraft } })
+    })
     ch.on('broadcast', { event: 'draft' }, ({ payload }) => {
       if (isHost) hostDraft(payload.id, payload.roundId, payload.year)
     })
@@ -210,7 +285,9 @@ export function useRoom(code: string, name: string, isHost: boolean) {
         reconnecting.value = false
         error.value = null
         await ch.track({ name: me.name, host: isHost })
-        if (isHost) {
+        if (isHost && resumed && !wasReconnect) {
+          resume()
+        } else if (isHost) {
           hostLobby()
           if (wasReconnect) sendSnapshot() // gäster kan ha missat något medan värden var borta
         } else if (wasReconnect) {
@@ -280,6 +357,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     // samla ihop snabba ändringar medan man drar
     clearTimeout(draftTimer)
     const roundId = s.roundId
+    lastDraft = { roundId, year }
     draftTimer = setTimeout(
       () => channel.value?.send({ type: 'broadcast', event: 'draft', payload: { id: me.id, roundId, year } }),
       250,
@@ -312,6 +390,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
   }
 
   function hostSettings(settings: Partial<RoomSettings>) {
+    if (base().phase !== 'lobby') return // inställningar ändras bara i lobbyn
     send({ ...base(), ...settings })
   }
 
@@ -374,6 +453,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     guesses[id] = year
     // tid räknas från att gissningen öppnade (låtstart eller låtslut beroende på inställning)
     guessTimes[id] = Math.max(0, Date.now() - hostStartAt - guessWindow(s).opens * 1000)
+    persist()
     // Bara anslutna spelare räknas – den som tappat nätet ska inte hålla upp de andra
     const online = new Set(present.value.map((p) => p.id))
     const allIn = s.players.filter((p) => online.has(p.id) || p.id === me.id).every((p) => p.id in guesses)
@@ -391,6 +471,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     const s = state.value
     if (!s || s.phase !== 'listen' || s.roundId !== roundId || id in guesses) return
     drafts[id] = year
+    persist()
   }
 
   function hostReveal() {
@@ -439,6 +520,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     present,
     connected,
     reconnecting,
+    resumed,
     error,
     startAt,
     myGuess,

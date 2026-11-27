@@ -10,6 +10,9 @@ const en: Messages = {
   'home.join': 'Join room',
   'home.noOnline': 'Online mode needs Supabase keys in .env.',
   'home.footer': 'Thousands of songs from 1960 to today · {flags} · Audio clips from iTunes',
+  'home.activeGame': 'You have a game in progress',
+  'home.rejoin': 'Rejoin',
+  'home.leaveGame': 'Leave',
   'home.language': 'Language',
 
   'common.exit': '← Quit',

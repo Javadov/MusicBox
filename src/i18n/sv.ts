@@ -10,6 +10,9 @@ const sv = {
   'home.join': 'Gå med i rum',
   'home.noOnline': 'Onlineläget kräver Supabase-nycklar i .env.',
   'home.footer': 'Tusentals låtar från 1960 till idag · {flags} · Ljudklipp från iTunes',
+  'home.activeGame': 'Du har ett pågående spel',
+  'home.rejoin': 'Gå tillbaka',
+  'home.leaveGame': 'Lämna',
   'home.language': 'Språk',
 
   'common.exit': '← Avsluta',

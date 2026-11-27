@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import Vinyl from '../components/Vinyl.vue'
 import YearSlider from '../components/YearSlider.vue'
 import Standings from '../components/Standings.vue'
@@ -10,15 +10,22 @@ import ListSelect from '../components/ListSelect.vue'
 import { listName, t } from '../i18n'
 import { DEFAULT_LIST, getList, type ListId } from '../lib/songs'
 import { useNow } from '../lib/useNow'
+import { clearSession, saveSession, touchSession, type Session } from '../lib/session'
 
-const props = defineProps<{ mode: 'host' | 'join' }>()
-defineEmits<{ exit: [] }>()
+const props = defineProps<{ mode: 'host' | 'join'; resume?: Session | null }>()
+const emit = defineEmits<{ exit: [] }>()
 const isHost = props.mode === 'host'
 
 let savedName = ''
 try { savedName = localStorage.getItem('ag-name') ?? '' } catch { /* */ }
-const name = ref(savedName)
-const code = ref(isHost ? makeCode() : '')
+const name = ref(props.resume?.name ?? savedName)
+const code = ref(props.resume?.code ?? (isHost ? makeCode() : ''))
+
+/** Lämnar med flit (← Lämna / Till start) – glöm spelet så det inte erbjuds igen på startsidan. */
+function exitGame() {
+  clearSession()
+  emit('exit')
+}
 const codeOk = computed(() => new RegExp(`^\\d{${CODE_LENGTH}}$`).test(code.value.trim()))
 const room = shallowRef<ReturnType<typeof useRoom> | null>(null)
 const year = ref(1992)
@@ -54,15 +61,38 @@ async function enter() {
   await unlockAudio()
   try { localStorage.setItem('ag-name', name.value.trim()) } catch { /* */ }
   const r = useRoom(code.value.trim(), name.value.trim(), isHost)
+  // Värden fortsätter en sparad match: visa matchens inställningar, inte standardvärdena
+  const st = r.state.value
+  if (r.resumed && st) {
+    count.value = st.total
+    audioAll.value = st.audioAll
+    guessSeconds.value = st.guessSeconds
+    guessDuring.value = !!st.guessDuring
+    clipSeconds.value = st.clipSeconds ?? CLIP_SECONDS
+    list.value = st.list ?? DEFAULT_LIST
+  }
   room.value = r
   r.onState.value = onState
+  saveSession({ code: code.value.trim(), name: name.value.trim(), host: isHost })
   r.connect()
 }
+
+// Rummet finns inte längre (värden har avslutat) – erbjud det inte igen på startsidan
+watch(
+  () => room.value?.error.value?.key,
+  (key) => key === 'err.noRoom' && clearSession(),
+)
+
+// Tillbaka till ett pågående spel från startsidan: gå in direkt
+onMounted(() => {
+  if (props.resume) enter()
+})
 
 let lastRound = ''
 function onState() {
   const r = room.value!
   const s = r.state.value!
+  touchSession()
   if (s.phase === 'listen' && s.roundId !== lastRound) {
     lastRound = s.roundId
     year.value = 1992
@@ -150,7 +180,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="topbar">
-    <button class="back" @click="$emit('exit')">{{ t('common.leave') }}</button>
+    <button class="back" @click="exitGame()">{{ t('common.leave') }}</button>
     <span v-if="s && s.round" class="muted small">{{ t('common.songOf', { n: s.round, total: s.total }) }}</span>
     <span v-else-if="room" class="muted small">{{ t('online.room', { code }) }}</span>
   </div>
@@ -292,7 +322,7 @@ onBeforeUnmount(() => {
       <Standings :players="s.players" :totals="s.totals" :me-id="me?.id" final />
       <p class="muted small center">{{ t('online.finalNote') }}</p>
       <button v-if="isHost" class="btn" @click="room.hostAgain()">{{ t('online.again') }}</button>
-      <button class="btn ghost" @click="$emit('exit')">{{ t('common.toStart') }}</button>
+      <button class="btn ghost" @click="exitGame()">{{ t('common.toStart') }}</button>
     </template>
   </template>
 </template>

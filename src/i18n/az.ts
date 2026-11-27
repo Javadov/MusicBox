@@ -10,6 +10,9 @@ const az: Messages = {
   'home.join': 'Otağa qoşul',
   'home.noOnline': 'Onlayn rejim üçün .env faylında Supabase açarları lazımdır.',
   'home.footer': '1960-dan bu günə minlərlə mahnı · {flags} · Səs klipləri iTunes-dan',
+  'home.activeGame': 'Davam edən oyunun var',
+  'home.rejoin': 'Geri qayıt',
+  'home.leaveGame': 'Tərk et',
   'home.language': 'Dil',
 
   'common.exit': '← Çıx',
