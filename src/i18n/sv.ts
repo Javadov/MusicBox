@@ -86,7 +86,7 @@ const sv = {
   'online.guessAfterSong': 'Gissa när låten är slut',
   'online.youGuessed': 'Du gissade',
   'online.waitingOthers': 'Väntar på de andra…',
-  'online.spectating': 'Du tittar på den här omgången.',
+  'online.matchStarted': 'Matchen har redan börjat. Du kan vara med från nästa omgång.',
   'online.noGuess': 'ingen gissning',
   'online.notDone': 'ej klar',
   'online.notDoneTitle': 'Tryckte inte Klar! – året på hjulet räknades, utan snabbhetsbonus',

@@ -86,7 +86,7 @@ const az: Messages = {
   'online.guessAfterSong': 'Mahnı bitəndə təxmin et',
   'online.youGuessed': 'Sənin təxminin',
   'online.waitingOthers': 'Digərləri gözlənilir…',
-  'online.spectating': 'Bu raunda baxırsan.',
+  'online.matchStarted': 'Oyun artıq başlayıb. Növbəti raunddan qoşula bilərsən.',
   'online.noGuess': 'təxmin yoxdur',
   'online.notDone': 'təsdiqlənmədi',
   'online.notDoneTitle': '“Hazır!” basılmadı – çarxdakı il sürət bonusu olmadan hesablandı',

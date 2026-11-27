@@ -184,24 +184,64 @@ describe('onlinerum', () => {
     vi.useRealTimers()
   })
 
-  it('släpper in den som kommer in mitt i matchen (t.ex. tappade nätet när värden startade)', async () => {
+  // tappar anslutningen: försvinner ur närvarolistan hos alla
+  const drop = (id: string) => {
+    for (const c of channels) { delete c.presence[id]; c.emit('presence', 'sync', {}) }
+  }
+
+  it('en ny person kan inte gå med när matchen redan börjat', async () => {
     vi.useFakeTimers()
     const host = useRoom('2222', 'Värd', true)
     host.connect(); await tick(1)
     host.hostStart(); await tick(1)
-    expect(host.state.value?.phase).toBe('listen')
-    expect(host.state.value?.players).toHaveLength(1)
-
     const late = useRoom('2222', 'Sen', false)
     late.connect(); await tick(1)
-    const players = late.state.value?.players.map((p) => p.name)
-    expect(players).toEqual(['Värd', 'Sen']) // med direkt, inte åskådare
-    expect(late.state.value?.totals[late.me.id]).toBe(0)
-    // och får samma starttid för låten som alla andra
-    expect(Math.abs(late.startAt.value - host.startAt.value)).toBeLessThan(50)
-    late.guess(1990); await tick(1)
-    await tick(40000)
-    expect(host.state.value?.reveal?.guesses[late.me.id]).toBe(1990)
+    expect(late.state.value?.phase).toBe('listen') // ser matchen …
+    expect(late.state.value?.players.map((p) => p.name)).toEqual(['Värd']) // … men är inte med
+    late.guess(1990); await tick(40000)
+    expect(host.state.value?.reveal?.guesses[late.me.id]).toBeUndefined()
+    host.hostAgain(); await tick(1)
+    host.hostStart(); await tick(1)
+    expect(late.state.value?.players.map((p) => p.name).sort()).toEqual(['Sen', 'Värd']) // med i nästa omgång
+    vi.useRealTimers()
+  })
+
+  it('den som tappade nätet precis när värden tryckte Starta är ändå med', async () => {
+    vi.useFakeTimers()
+    const host = useRoom('6666', 'Värd', true)
+    host.connect(); await tick(1)
+    const sara = useRoom('6666', 'Sara', false)
+    sara.connect(); await tick(1)
+    drop(sara.me.id) // skärmen låstes
+    host.hostStart(); await tick(1)
+    expect(host.state.value?.players.map((p) => p.name).sort()).toEqual(['Sara', 'Värd'])
+    vi.useRealTimers()
+  })
+
+  it('den som tryckt Lämna i lobbyn är inte med i matchen', async () => {
+    vi.useFakeTimers()
+    const host = useRoom('7777', 'Värd', true)
+    host.connect(); await tick(1)
+    const bo = useRoom('7777', 'Bo', false)
+    bo.connect(); await tick(1)
+    bo.leave(); drop(bo.me.id); await tick(1)
+    host.hostStart(); await tick(1)
+    expect(host.state.value?.players.map((p) => p.name)).toEqual(['Värd'])
+    vi.useRealTimers()
+  })
+
+  it('en frånkopplad spelare hindrar inte att svaret visas när alla andra tryckt Klar!', async () => {
+    vi.useFakeTimers()
+    const host = useRoom('8888', 'Värd', true)
+    host.connect(); await tick(1)
+    const sara = useRoom('8888', 'Sara', false)
+    sara.connect(); await tick(1)
+    host.hostSettings({ guessDuring: true, guessSeconds: 30, clipSeconds: 30 }); await tick(1)
+    host.hostStart(); await tick(1)
+    drop(sara.me.id)
+    await tick(4000)
+    host.guess(2000); await tick(1000)
+    expect(host.state.value?.phase).toBe('reveal') // väntar inte 30 s på Sara
     vi.useRealTimers()
   })
 
@@ -223,6 +263,30 @@ describe('onlinerum', () => {
     again.connect(); await tick(1)
     expect(again.state.value?.players.filter((p) => p.name === 'Sara')).toHaveLength(1)
     expect(again.state.value?.totals[again.me.id]).toBe(42)
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('en låst gissning följer med vid omladdning och kan inte ändras', async () => {
+    const mem = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) })
+    vi.useFakeTimers()
+    const host = useRoom('9999', 'Värd', true)
+    host.connect(); await tick(1)
+    const first = useRoom('9999', 'Sara', false)
+    first.connect(); await tick(1)
+    host.hostSettings({ guessDuring: true, guessSeconds: 30, clipSeconds: 30 }); await tick(1)
+    host.hostStart(); await tick(4000)
+    first.guess(1995); await tick(1)
+
+    first.leave() // laddar om
+    const again = useRoom('9999', 'Sara', false)
+    again.connect(); await tick(1)
+    expect(again.myGuess.value).toEqual({ roundId: again.state.value!.roundId, year: 1995 }) // visar "Du gissade 1995"
+    again.guess(1970); await tick(1) // försöker gissa igen
+    host.guess(2000); await tick(1000)
+    expect(host.state.value?.phase).toBe('reveal')
+    expect(host.state.value?.reveal?.guesses[again.me.id]).toBe(1995) // första gissningen gäller
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })

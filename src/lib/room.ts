@@ -72,6 +72,24 @@ const uid = () => Math.random().toString(36).slice(2, 10)
  * Då känner värden igen spelaren och den får tillbaka sin plats och sina poäng.
  */
 const PLAYER_KEY = 'ag-player'
+/** spelarens låsta gissning i pågående låt – så den följer med vid omladdning */
+const GUESS_KEY = 'ag-guess'
+const storage = {
+  get<T>(k: string): T | null {
+    try {
+      return JSON.parse(localStorage.getItem(k) ?? 'null') as T | null
+    } catch {
+      return null
+    }
+  },
+  set(k: string, v: unknown) {
+    try {
+      localStorage.setItem(k, JSON.stringify(v))
+    } catch {
+      /* ingen lagring */
+    }
+  },
+}
 function playerId(code: string): string {
   try {
     const saved = JSON.parse(localStorage.getItem(PLAYER_KEY) ?? 'null') as { code?: string; id?: string } | null
@@ -110,6 +128,8 @@ export function useRoom(code: string, name: string, isHost: boolean) {
   const channel = shallowRef<RealtimeChannel | null>(null)
 
   // värdens interna data
+  /** alla som varit i lobbyn inför den här matchen (id → namn) */
+  const members = new Map<string, string>()
   let songs: Song[] = []
   let songIdx = 0
   let current: (Song & { artwork?: string }) | null = null
@@ -127,7 +147,12 @@ export function useRoom(code: string, name: string, isHost: boolean) {
   function apply(s: RoomState) {
     const newRound = s.phase === 'listen' && s.roundId !== state.value?.roundId
     state.value = s
-    if (newRound) startAt.value = Date.now() + (s.startIn ?? 0)
+    if (newRound) {
+      startAt.value = Date.now() + (s.startIn ?? 0)
+      // redan gissat i den här låten (före en omladdning)? Då gäller den gissningen.
+      const saved = storage.get<{ code: string; roundId: string; year: number }>(GUESS_KEY)
+      if (saved?.code === code && saved.roundId === s.roundId) myGuess.value = { roundId: saved.roundId, year: saved.year }
+    }
     onState.value?.(s)
   }
 
@@ -151,8 +176,10 @@ export function useRoom(code: string, name: string, isHost: boolean) {
         name: metas[0]?.name ?? '?',
         host: !!metas[0]?.host,
       }))
-      if (isHost && state.value?.phase === 'lobby') hostLobby()
-      else if (isHost) hostAdmit()
+      if (isHost && state.value?.phase === 'lobby') {
+        for (const p of present.value) members.set(p.id, p.name)
+        hostLobby()
+      }
     })
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (!isHost) apply(payload as RoomState)
@@ -162,6 +189,10 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     })
     ch.on('broadcast', { event: 'guess' }, ({ payload }) => {
       if (isHost) hostGuess(payload.id, payload.roundId, payload.year)
+    })
+    ch.on('broadcast', { event: 'bye' }, ({ payload }) => {
+      // tryckte Lämna i lobbyn – ska inte räknas med när matchen startar
+      if (isHost && state.value?.phase === 'lobby') members.delete(payload.id)
     })
     ch.on('broadcast', { event: 'draft' }, ({ payload }) => {
       if (isHost) hostDraft(payload.id, payload.roundId, payload.year)
@@ -222,6 +253,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
   }
 
   function leave() {
+    channel.value?.send({ type: 'broadcast', event: 'bye', payload: { id: me.id } })
     clearTimeout(draftTimer)
     if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible)
     clearTimeout(revealTimer)
@@ -234,6 +266,7 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     const s = state.value
     if (!s || s.phase !== 'listen' || myGuess.value?.roundId === s.roundId) return
     myGuess.value = { roundId: s.roundId, year }
+    storage.set(GUESS_KEY, { code, ...myGuess.value })
     clearTimeout(draftTimer)
     if (isHost) hostGuess(me.id, s.roundId, year)
     else channel.value?.send({ type: 'broadcast', event: 'guess', payload: { id: me.id, roundId: s.roundId, year } })
@@ -272,25 +305,6 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     )
   }
 
-  /**
-   * Under en match: släpp in alla som är anslutna men inte med i matchen –
-   * t.ex. den som tappade anslutningen precis när värden tryckte Starta, eller kom sent.
-   * Nya spelare börjar på 0 p; den som kommer tillbaka behåller sina poäng.
-   */
-  function hostAdmit() {
-    const s = state.value
-    if (!s || s.phase === 'lobby') return
-    const known = new Set(s.players.map((p) => p.id))
-    const newcomers = present.value.filter((p) => !known.has(p.id)).map(({ id, name }) => ({ id, name }))
-    if (!newcomers.length) return
-    apply({
-      ...s,
-      players: [...s.players, ...newcomers],
-      totals: { ...s.totals, ...Object.fromEntries(newcomers.map((p) => [p.id, s.totals[p.id] ?? 0])) },
-    })
-    sendSnapshot() // med rätt starttid för låten som spelas just nu
-  }
-
   function hostLobby() {
     const s = base()
     if (s.phase !== 'lobby') return
@@ -303,7 +317,10 @@ export function useRoom(code: string, name: string, isHost: boolean) {
 
   async function hostStart() {
     const s = base()
-    const players = present.value.map(({ id, name }) => ({ id, name }))
+    // Alla som varit i lobbyn är med – även den som tappade anslutningen precis nu.
+    // Efter start kommer bara de här spelarna in igen (nya får vänta till nästa omgång).
+    for (const p of present.value) members.set(p.id, p.name)
+    const players = [...members].map(([id, name]) => ({ id, name }))
     // visa "laddar" direkt medan låtlistan hämtas
     send({ ...s, phase: 'loading', players, totals: Object.fromEntries(players.map((p) => [p.id, 0])), round: 0 })
     try {
@@ -357,7 +374,9 @@ export function useRoom(code: string, name: string, isHost: boolean) {
     guesses[id] = year
     // tid räknas från att gissningen öppnade (låtstart eller låtslut beroende på inställning)
     guessTimes[id] = Math.max(0, Date.now() - hostStartAt - guessWindow(s).opens * 1000)
-    const allIn = s.players.every((p) => p.id in guesses)
+    // Bara anslutna spelare räknas – den som tappat nätet ska inte hålla upp de andra
+    const online = new Set(present.value.map((p) => p.id))
+    const allIn = s.players.filter((p) => online.has(p.id) || p.id === me.id).every((p) => p.id in guesses)
     if (allIn) {
       clearTimeout(revealTimer)
       // Alla har tryckt Klar! – avslöja direkt (låten stoppas), ingen anledning att lyssna klart.
@@ -407,6 +426,9 @@ export function useRoom(code: string, name: string, isHost: boolean) {
 
   function hostAgain() {
     clearTimeout(revealTimer)
+    // ny omgång: de som är i rummet nu (även de som väntat under förra matchen)
+    members.clear()
+    for (const p of present.value) members.set(p.id, p.name)
     send({ ...base(), phase: 'lobby', round: 0, totals: {}, reveal: undefined })
     hostLobby()
   }

@@ -259,7 +259,7 @@ onBeforeUnmount(() => {
         <p>{{ t('online.youGuessed') }} <strong>{{ room.myGuess.value?.year }}</strong></p>
         <p class="muted small">{{ t('online.waitingOthers') }}</p>
       </section>
-      <p v-else class="center muted">{{ t('online.spectating') }}</p>
+      <p v-else class="center muted">{{ t('online.matchStarted') }}</p>
     </template>
 
     <!-- AVSLÖJANDE -->

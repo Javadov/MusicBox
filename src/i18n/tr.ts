@@ -86,7 +86,7 @@ const tr: Messages = {
   'online.guessAfterSong': 'Şarkı bitince tahmin et',
   'online.youGuessed': 'Tahminin',
   'online.waitingOthers': 'Diğerleri bekleniyor…',
-  'online.spectating': 'Bu turu izliyorsun.',
+  'online.matchStarted': 'Maç zaten başladı. Bir sonraki turdan itibaren katılabilirsin.',
   'online.noGuess': 'tahmin yok',
   'online.notDone': 'onaylanmadı',
   'online.notDoneTitle': '“Tamam!” basılmadı – çarktaki yıl hız bonusu olmadan sayıldı',

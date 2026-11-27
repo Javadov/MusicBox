@@ -86,7 +86,7 @@ const en: Messages = {
   'online.guessAfterSong': 'Guess when the song ends',
   'online.youGuessed': 'You guessed',
   'online.waitingOthers': 'Waiting for the others…',
-  'online.spectating': 'You are watching this round.',
+  'online.matchStarted': 'The match has already started. You can join from the next round.',
   'online.noGuess': 'no guess',
   'online.notDone': 'not done',
   'online.notDoneTitle': "Didn't press Done! – the year on the wheel counted, without speed bonus",
