@@ -37,8 +37,8 @@ function forget() {
         {{ t('online.room', { code: active.code }) }} · {{ active.name }}<template v-if="active.host"> · {{ t('online.host') }}</template>
       </p>
     </div>
-    <div class="row">
-      <button id="rejoin" class="btn grow" @click="rejoin">{{ t('home.rejoin') }}</button>
+    <div class="resume-actions">
+      <button id="rejoin" class="btn" @click="rejoin">{{ t('home.rejoin') }}</button>
       <button id="forget" class="btn ghost" @click="forget">{{ t('home.leaveGame') }}</button>
     </div>
   </section>
@@ -57,7 +57,7 @@ function forget() {
 .lang-row { display: flex; justify-content: flex-end; }
 .hero { padding-top: 4px; gap: 10px; }
 .resume { border: 2px solid var(--gold); gap: 12px; }
-.resume .row { flex-wrap: nowrap; }
-.resume .btn { min-height: 48px; }
-.grow { flex: 1; }
+/* Två knappar sida vid sida: "Gå tillbaka" lite bredare, texten bryts aldrig */
+.resume-actions { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; }
+.resume .btn { min-height: 48px; padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 16px; }
 </style>
